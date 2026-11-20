@@ -2009,7 +2009,221 @@ elif page == "8. Generate Timetable":
                         ].sum()
                     )
                 )
+                    # =================================================
+        # LAB-COURSE COMPATIBILITY MAPPING
+        # =================================================
 
+        st.divider()
+
+        st.subheader("Lab–Course Compatibility Mapping")
+
+        st.write(
+            "Select which laboratories each practical course "
+            "is permitted to use."
+        )
+
+        # ---------------------------------------------
+        # GET LABORATORY RESOURCES
+        # ---------------------------------------------
+        rooms_df = uploaded_data["rooms"]["data"].copy()
+
+        rooms_df.columns = (
+            rooms_df.columns.astype(str).str.strip()
+        )
+
+        # Remove unwanted exported index columns
+        rooms_df = rooms_df.loc[
+            :,
+            ~rooms_df.columns.astype(str).str.startswith("Unnamed")
+        ]
+
+        lab_resources = rooms_df[
+            rooms_df["Type"].astype(str).str.lower().str.contains(
+                "lab", na=False
+            )
+        ].copy()
+
+        # ---------------------------------------------
+        # CREATE LAB OPTIONS
+        # ---------------------------------------------
+        lab_options = {}
+
+        for _, lab in lab_resources.iterrows():
+
+            lab_id = str(lab["Room/Lab ID"])
+
+            lab_name = str(lab["Room/Lab Name"])
+
+            lab_options[
+                f"{lab_id} - {lab_name}"
+            ] = lab_id
+
+        # ---------------------------------------------
+        # IDENTIFY COURSES REQUIRING LABS
+        # ---------------------------------------------
+        lab_courses = requirements_df[
+            requirements_df[
+                "Lab_Sessions_Per_Week"
+            ] > 0
+        ].copy()
+
+        # ---------------------------------------------
+        # EXISTING MAPPING
+        # ---------------------------------------------
+        existing_mapping = st.session_state.get(
+            "lab_course_mapping",
+            {}
+        )
+
+        current_mapping = {}
+
+        # ---------------------------------------------
+        # DISPLAY COURSE-WISE MAPPING
+        # ---------------------------------------------
+        if lab_courses.empty:
+
+            st.info(
+                "No laboratory courses were identified "
+                "in the selected semesters."
+            )
+
+        else:
+
+            st.write(
+                f"Laboratory courses identified: "
+                f"{len(lab_courses)}"
+            )
+
+            for _, course in lab_courses.iterrows():
+
+                course_key = (
+                    f"{course['Programme']}_"
+                    f"Sem{course['Semester']}_"
+                    f"{course['Course_ID']}"
+                )
+
+                course_label = (
+                    f"{course['Programme']} | "
+                    f"Semester {course['Semester']} | "
+                    f"{course['Course_ID']} — "
+                    f"{course['Course_Name']}"
+                )
+
+                previously_selected = (
+                    existing_mapping.get(course_key, [])
+                )
+
+                selected_options = [
+                    option
+                    for option, lab_id in lab_options.items()
+                    if lab_id in previously_selected
+                ]
+
+                st.markdown(
+                    f"**{course_label}**"
+                )
+
+                selected_labs = st.multiselect(
+                    "Compatible laboratories",
+                    options=list(lab_options.keys()),
+                    default=selected_options,
+                    key=f"lab_mapping_{course_key}",
+                    help=(
+                        "Select all laboratories that can "
+                        "conduct this course."
+                    )
+                )
+
+                current_mapping[course_key] = [
+                    lab_options[option]
+                    for option in selected_labs
+                ]
+
+        # ---------------------------------------------
+        # SAVE LAB MAPPING
+        # ---------------------------------------------
+        if st.button(
+            "Save Lab–Course Mapping",
+            type="primary",
+            use_container_width=True
+        ):
+
+            mapping_errors = []
+
+            if not lab_courses.empty:
+
+                for course_key, selected_lab_ids in (
+                    current_mapping.items()
+                ):
+
+                    if not selected_lab_ids:
+
+                        mapping_errors.append(
+                            f"{course_key}: Select at least "
+                            "one compatible laboratory."
+                        )
+
+            if mapping_errors:
+
+                st.error(
+                    "Please complete the laboratory mapping:"
+                )
+
+                for error in mapping_errors:
+                    st.write("❌", error)
+
+            else:
+
+                st.session_state.lab_course_mapping = (
+                    current_mapping.copy()
+                )
+
+                st.session_state.lab_mapping_confirmed = True
+
+                st.session_state.config[
+                    "lab_course_mapping"
+                ] = current_mapping.copy()
+
+                st.success(
+                    "Lab–Course Compatibility Mapping saved!"
+                )
+
+                mapping_display = []
+
+                for _, course in lab_courses.iterrows():
+
+                    course_key = (
+                        f"{course['Programme']}_"
+                        f"Sem{course['Semester']}_"
+                        f"{course['Course_ID']}"
+                    )
+
+                    mapped_ids = current_mapping.get(
+                        course_key, []
+                    )
+
+                    mapped_names = [
+                        option
+                        for option, lab_id in lab_options.items()
+                        if lab_id in mapped_ids
+                    ]
+
+                    mapping_display.append({
+                        "Programme": course["Programme"],
+                        "Semester": course["Semester"],
+                        "Course_ID": course["Course_ID"],
+                        "Course_Name": course["Course_Name"],
+                        "Compatible_Labs": ", ".join(
+                            mapped_names
+                        )
+                    })
+
+                if mapping_display:
+
+                    st.dataframe(
+                        pd.DataFrame(mapping_display),
+                        use_container_width=True
+                    )
             # -----------------------------------------
             # EXCLUDED COURSES
             # -----------------------------------------
@@ -2038,6 +2252,15 @@ elif page == "8. Generate Timetable":
                 type="primary",
                 use_container_width=True
             ):
+            
+            if not st.session_state.get(
+                "lab_mapping_confirmed", False):
+            
+                st.error(
+                    "Please save Lab–Course Compatibility Mapping first."
+                )
+
+            else:
 
                 st.session_state.course_requirements = (
                     requirements_df.copy()
