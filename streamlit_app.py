@@ -2339,30 +2339,7 @@ elif page == "8. Generate Timetable":
                         5. Construct the scheduling conflict graph.
                         """
                     )
-            # -----------------------------------------
-            # NEXT STAGE INDICATOR
-            # -----------------------------------------
-            if st.session_state.get(
-                "course_requirements_confirmed",
-                False
-            ):
 
-                st.success(
-                    "Course requirements are ready for "
-                    "scheduling session generation."
-                )
-
-                st.info(
-                    """
-                    Next stage:
-
-                    1. Generate individual theory sessions.
-                    2. Generate two-period laboratory blocks.
-                    3. Create section-specific scheduling tasks.
-                    4. Determine faculty candidate lists.
-                    5. Construct the scheduling conflict graph.
-                    """
-                )
 # =========================================================
 # FOOTER
 # =========================================================
