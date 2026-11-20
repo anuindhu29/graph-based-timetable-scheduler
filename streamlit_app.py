@@ -481,12 +481,10 @@ elif page == "5. Upload & Retrieve Files":
                         # Extract DOCX text
                         file_bytes = file.getvalue()
                         
-                        document = Document(BytesIO(file_bytes))
+                        doc = Document(BytesIO(file_bytes))
                         
                         document_text = "\n".join(
-                            paragraph.text
-                            for paragraph in document.paragraphs
-                            if paragraph.text.strip()
+                            p.text for p in doc.paragraphs if p.text.strip()
                         )
 
                         tables_data = []
