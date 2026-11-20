@@ -42,7 +42,8 @@ page = st.sidebar.radio(
         "3. Faculty Workload",
         "4. Configuration Review",
         "5. Upload & Retrieve Files",
-        "6. Generate Timetable"
+        "6. Faculty Constraints & HOD Approval",
+        "7. Generate Timetable"
     ]
 )
 
@@ -821,10 +822,11 @@ elif page == "5. Upload & Retrieve Files":
                     file_name=selected_info["filename"],
                     key=f"original_download_{selected_file}"
                 )
+                
 # =========================================================
-# 6. GENERATE TIMETABLE
+# 7. GENERATE TIMETABLE
 # =========================================================
-elif page == "6. Generate Timetable":
+elif page == "7. Generate Timetable":
 
     st.header("🗓️ Generate Academic Timetable")
 
@@ -844,10 +846,15 @@ elif page == "6. Generate Timetable":
             "⚠️ Please complete and confirm Programme Configuration "
             "before proceeding."
         )
-
+    
     elif not st.session_state.get(
-        "files_confirmed", False
+        "faculty_constraints_confirmed", False
     ):
+    
+        st.warning(
+            "Please complete and save Faculty Constraints "
+            "& HOD Approval before generating the timetable."
+        )
 
         st.warning(
             "⚠️ Please upload, review and confirm all required datasets "
