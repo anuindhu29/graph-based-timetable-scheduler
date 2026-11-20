@@ -43,7 +43,8 @@ page = st.sidebar.radio(
         "4. Configuration Review",
         "5. Upload & Retrieve Files",
         "6. Faculty Constraints & HOD Approval",
-        "7. Generate Timetable"
+        "7. Classroom & Laboratory Configuration",
+        "8. Generate Timetable"
     ]
 )
 
@@ -1340,11 +1341,216 @@ elif page == "6. Faculty Constraints & HOD Approval":
                     st.dataframe(
                         pd.DataFrame(constraint_records),
                         use_container_width=True
-                    )                
+                    )     
+
+# =========================================================
+# 7. CLASSROOM & LABORATORY CONFIGURATION
+# =========================================================
+elif page == "7. Classroom & Laboratory Configuration":
+
+    st.header("Classroom & Laboratory Configuration")
+
+    if not st.session_state.get("files_confirmed", False):
+
+        st.warning(
+            "Please upload, review and confirm your files first."
+        )
+
+    elif "rooms" not in st.session_state.uploaded_data:
+
+        st.error(
+            "Room and Laboratory dataset not found. "
+            "Upload it in Page 5."
+        )
+
+    else:
+
+        room_df = st.session_state.uploaded_data[
+            "rooms"
+        ]["data"].copy()
+
+        # Remove exported Excel/CSV index columns
+        room_df = room_df.loc[
+            :,
+            ~room_df.columns.astype(str).str.startswith("Unnamed")
+        ]
+
+        st.subheader("Uploaded Infrastructure")
+
+        st.write(
+            "Review and modify classroom and laboratory details "
+            "if necessary."
+        )
+
+        edited_rooms = st.data_editor(
+            room_df,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="room_lab_editor"
+        )
+
+        st.divider()
+
+        st.subheader("Infrastructure Summary")
+
+        if "Type" in edited_rooms.columns:
+
+            room_count = (
+                edited_rooms["Type"]
+                .astype(str)
+                .str.lower()
+                .eq("classroom")
+                .sum()
+            )
+
+            lab_count = (
+                edited_rooms["Type"]
+                .astype(str)
+                .str.lower()
+                .eq("laboratory")
+                .sum()
+            )
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.metric(
+                "Total Resources",
+                len(edited_rooms)
+            )
+
+            col2.metric(
+                "Classrooms",
+                int(room_count)
+            )
+
+            col3.metric(
+                "Laboratories",
+                int(lab_count)
+            )
+
+        st.divider()
+
+        if st.button(
+            "Save Classroom & Laboratory Configuration",
+            type="primary",
+            use_container_width=True
+        ):
+
+            errors = []
+
+            required_columns = [
+                "Room/Lab ID",
+                "Room/Lab Name",
+                "Type",
+                "Capacity"
+            ]
+
+            missing_columns = [
+                col for col in required_columns
+                if col not in edited_rooms.columns
+            ]
+
+            if missing_columns:
+
+                errors.append(
+                    "Missing columns: "
+                    + ", ".join(missing_columns)
+                )
+
+            else:
+
+                if edited_rooms["Room/Lab ID"].duplicated().any():
+
+                    errors.append(
+                        "Room/Lab IDs must be unique."
+                    )
+
+                if edited_rooms["Capacity"].isnull().any():
+
+                    errors.append(
+                        "Capacity cannot be empty."
+                    )
+
+                valid_types = [
+                    "Classroom",
+                    "Laboratory"
+                ]
+
+                invalid_types = edited_rooms[
+                    ~edited_rooms["Type"].isin(valid_types)
+                ]
+
+                if not invalid_types.empty:
+
+                    errors.append(
+                        "Type must be Classroom or Laboratory."
+                    )
+
+                try:
+
+                    edited_rooms["Capacity"] = (
+                        edited_rooms["Capacity"]
+                        .astype(int)
+                    )
+
+                    if (
+                        edited_rooms["Capacity"] <= 0
+                    ).any():
+
+                        errors.append(
+                            "Capacity must be greater than zero."
+                        )
+
+                except Exception:
+
+                    errors.append(
+                        "Capacity must contain numeric values."
+                    )
+
+            if errors:
+
+                st.error("Please correct these errors:")
+
+                for error in errors:
+                    st.write("❌", error)
+
+            else:
+
+                st.session_state.room_lab_config = (
+                    edited_rooms.copy()
+                )
+
+                st.session_state.room_lab_confirmed = True
+
+                st.session_state.config[
+                    "room_lab_configuration"
+                ] = edited_rooms.to_dict(
+                    orient="records"
+                )
+
+                st.success(
+                    "Classroom and Laboratory configuration saved!"
+                )
+
+                st.subheader("Final Infrastructure")
+
+                st.dataframe(
+                    edited_rooms,
+                    use_container_width=True
+                )
+
+                st.download_button(
+                    "Download Infrastructure Configuration",
+                    data=edited_rooms.to_csv(
+                        index=False
+                    ).encode("utf-8"),
+                    file_name="ROOM_LAB_CONFIG.csv",
+                    mime="text/csv"
+                )
 # =========================================================
 # 7. GENERATE TIMETABLE
 # =========================================================
-elif page == "7. Generate Timetable":
+elif page == "8. Generate Timetable":
 
     st.header("🗓️ Generate Academic Timetable")
 
@@ -1359,10 +1565,19 @@ elif page == "7. Generate Timetable":
     if not st.session_state.config.get(
         "complete_confirmed", False
     ):
-
+    
         st.warning(
             "⚠️ Please complete and confirm Programme Configuration "
             "before proceeding."
+        )
+    
+    elif not st.session_state.get(
+        "files_confirmed", False
+    ):
+    
+        st.warning(
+            "⚠️ Please upload, review and confirm all required datasets "
+            "before generating the timetable."
         )
     
     elif not st.session_state.get(
@@ -1373,12 +1588,16 @@ elif page == "7. Generate Timetable":
             "Please complete and save Faculty Constraints "
             "& HOD Approval before generating the timetable."
         )
-
+    
+    elif not st.session_state.get(
+        "room_lab_confirmed", False
+    ):
+    
         st.warning(
-            "⚠️ Please upload, review and confirm all required datasets "
-            "before generating the timetable."
+            "Please complete and save Classroom & Laboratory "
+            "Configuration before generating the timetable."
         )
-
+    
     else:
 
         st.success(
