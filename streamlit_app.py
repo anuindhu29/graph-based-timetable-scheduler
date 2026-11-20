@@ -611,46 +611,73 @@ elif page == "5. Upload & Retrieve Files":
                     "Uploaded files confirmed and retrieved!"
                 )
 
-        # =================================================
+       # =================================================
         # RETRIEVE STORED DATA
         # =================================================
         if st.session_state.uploaded_data:
-
+        
             st.divider()
-
             st.subheader("Retrieve Uploaded Data")
-
-            file_options = list(
-                st.session_state.uploaded_data.keys()
-            )
-
+        
+            file_options = list(st.session_state.uploaded_data.keys())
+        
             selected_file = st.selectbox(
                 "Select dataset",
                 file_options
             )
-
-            dataset = st.session_state.uploaded_data[
-                selected_file
-            ]["data"]
-
-            st.dataframe(
-                dataset,
-                use_container_width=True
-            )
-
-            st.download_button(
-                "Download Retrieved Dataset as CSV",
-                dataset.to_csv(index=False),
-                file_name=f"{selected_file}_retrieved.csv",
-                mime="text/csv"
-            )
-
-            st.download_button(
-                "Download Dataset as Excel",
-                dataset.to_csv(index=False),
-                file_name=f"{selected_file}_retrieved.csv",
-                mime="text/csv"
-            )
+        
+            selected_info = st.session_state.uploaded_data[selected_file]
+        
+            # ---------------------------------------------
+            # EXCEL DATASET
+            # ---------------------------------------------
+            if selected_info.get("type") == "excel":
+        
+                dataset = selected_info["data"]
+        
+                st.dataframe(
+                    dataset,
+                    use_container_width=True
+                )
+        
+                st.download_button(
+                    "Download Retrieved Dataset as CSV",
+                    dataset.to_csv(index=False),
+                    file_name=f"{selected_file}_retrieved.csv",
+                    mime="text/csv"
+                )
+        
+                st.download_button(
+                    "Download Dataset as Excel",
+                    dataset.to_excel(index=False),
+                    file_name=f"{selected_file}_retrieved.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        
+            # ---------------------------------------------
+            # DOCUMENT / RULES FILE
+            # ---------------------------------------------
+            elif selected_info.get("type") == "document":
+        
+                st.success("Document uploaded and extracted successfully.")
+        
+                st.write("**Filename:**", selected_info.get("filename"))
+        
+                if selected_info.get("text"):
+        
+                    st.subheader("Extracted Document Content")
+        
+                    st.text_area(
+                        "Document text",
+                        selected_info["text"],
+                        height=400
+                    )
+        
+                else:
+        
+                    st.warning(
+                        "The document was uploaded, but no extracted text is available."
+                    )
 # =========================================================
 # 6. GENERATE TIMETABLE
 # =========================================================
