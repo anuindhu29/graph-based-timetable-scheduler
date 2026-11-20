@@ -71,9 +71,9 @@ if page == "1. Programme Configuration":
     )
 
     if semester_type == "Odd":
-        btech_semesters = [3, 5, 7, 9]
+        btech_semesters = [3, 5, 7]
     else:
-        btech_semesters = [4, 6, 8, 10]
+        btech_semesters = [4, 6, 8]
 
     st.info(
         "B.Tech Semester 1 and Semester 2 are excluded."
