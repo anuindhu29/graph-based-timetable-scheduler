@@ -7,3 +7,5 @@ ortools
 matplotlib
 plotly
 odfpy
+python-docx
+PyPDF2
