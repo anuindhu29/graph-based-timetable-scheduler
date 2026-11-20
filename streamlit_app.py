@@ -2339,7 +2339,296 @@ elif page == "8. Generate Timetable":
                         5. Construct the scheduling conflict graph.
                         """
                     )
+                      # =================================================
+        # SCHEDULING SESSION GENERATION
+        # =================================================
 
+        st.divider()
+        st.subheader("Scheduling Session Generation")
+
+        if st.session_state.get(
+            "course_requirements_confirmed",
+            False
+        ):
+
+            st.write(
+                "Generate individual theory sessions and "
+                "continuous laboratory blocks for every section."
+            )
+
+            if st.button(
+                "Generate Scheduling Sessions",
+                type="primary",
+                use_container_width=True
+            ):
+
+                requirements = st.session_state.course_requirements
+
+                academic_config = st.session_state.config[
+                    "academic_programmes"
+                ]
+
+                lab_mapping = st.session_state.get(
+                    "lab_course_mapping",
+                    {}
+                )
+
+                generated_sessions = []
+                generation_errors = []
+
+                # -----------------------------------------
+                # GENERATE SECTION LABELS
+                # -----------------------------------------
+
+                programme_sections = {
+                    "B.Tech": [
+                        f"B.Tech-S{i}"
+                        for i in range(
+                            1,
+                            academic_config["B.Tech"]["sections"] + 1
+                        )
+                    ],
+                    "M.Tech": [
+                        f"M.Tech-S{i}"
+                        for i in range(
+                            1,
+                            academic_config["M.Tech"]["sections"] + 1
+                        )
+                    ]
+                }
+
+                # -----------------------------------------
+                # GENERATE INDIVIDUAL SESSIONS
+                # -----------------------------------------
+
+                for _, course in requirements.iterrows():
+
+                    programme = course["Programme"]
+                    semester = int(course["Semester"])
+                    course_id = str(course["Course_ID"])
+                    course_name = str(course["Course_Name"])
+
+                    theory_count = int(
+                        course["Theory_Sessions_Per_Week"]
+                    )
+
+                    lab_count = int(
+                        course["Lab_Sessions_Per_Week"]
+                    )
+
+                    lab_duration = int(
+                        course["Lab_Consecutive_Periods"]
+                    )
+
+                    course_key = (
+                        f"{programme}_Sem{semester}_{course_id}"
+                    )
+
+                    sections = programme_sections.get(
+                        programme,
+                        []
+                    )
+
+                    # -------------------------------------
+                    # THEORY SESSIONS
+                    # -------------------------------------
+
+                    for section in sections:
+
+                        for session_number in range(
+                            1,
+                            theory_count + 1
+                        ):
+
+                            session_id = (
+                                f"{course_id}_{section}_T"
+                                f"{session_number}"
+                            )
+
+                            generated_sessions.append({
+
+                                "Session_ID": session_id,
+
+                                "Programme": programme,
+
+                                "Semester": semester,
+
+                                "Section": section,
+
+                                "Course_ID": course_id,
+
+                                "Course_Name": course_name,
+
+                                "Session_Type": "Theory",
+
+                                "Session_Number": session_number,
+
+                                "Duration_Periods": 1,
+
+                                "Compatible_Labs": [],
+
+                                "Faculty_Candidates": []
+
+                            })
+
+                    # -------------------------------------
+                    # LAB SESSIONS
+                    # -------------------------------------
+
+                    if lab_count > 0:
+
+                        compatible_labs = lab_mapping.get(
+                            course_key,
+                            []
+                        )
+
+                        if not compatible_labs:
+
+                            generation_errors.append(
+                                f"{course_key}: No compatible "
+                                "laboratory mapping found."
+                            )
+
+                        else:
+
+                            for section in sections:
+
+                                for session_number in range(
+                                    1,
+                                    lab_count + 1
+                                ):
+
+                                    session_id = (
+                                        f"{course_id}_{section}_L"
+                                        f"{session_number}"
+                                    )
+
+                                    generated_sessions.append({
+
+                                        "Session_ID": session_id,
+
+                                        "Programme": programme,
+
+                                        "Semester": semester,
+
+                                        "Section": section,
+
+                                        "Course_ID": course_id,
+
+                                        "Course_Name": course_name,
+
+                                        "Session_Type": "Lab",
+
+                                        "Session_Number": session_number,
+
+                                        "Duration_Periods": lab_duration,
+
+                                        "Compatible_Labs": (
+                                            compatible_labs.copy()
+                                        ),
+
+                                        "Faculty_Candidates": []
+
+                                    })
+
+                # -----------------------------------------
+                # VALIDATION
+                # -----------------------------------------
+
+                if generation_errors:
+
+                    st.error(
+                        "Session generation stopped because "
+                        "some laboratory mappings are missing."
+                    )
+
+                    for error in generation_errors:
+                        st.write("❌", error)
+
+                else:
+
+                    sessions_df = pd.DataFrame(
+                        generated_sessions
+                    )
+
+                    st.session_state.generated_sessions = (
+                        sessions_df.copy()
+                    )
+
+                    st.session_state.config[
+                        "generated_sessions"
+                    ] = generated_sessions
+
+                    st.success(
+                        f"Successfully generated "
+                        f"{len(sessions_df)} scheduling sessions."
+                    )
+
+                    # -------------------------------------
+                    # SUMMARY
+                    # -------------------------------------
+
+                    theory_total = (
+                        sessions_df["Session_Type"]
+                        .eq("Theory")
+                        .sum()
+                    )
+
+                    lab_total = (
+                        sessions_df["Session_Type"]
+                        .eq("Lab")
+                        .sum()
+                    )
+
+                    col1, col2, col3 = st.columns(3)
+
+                    col1.metric(
+                        "Total Scheduling Sessions",
+                        len(sessions_df)
+                    )
+
+                    col2.metric(
+                        "Theory Sessions",
+                        int(theory_total)
+                    )
+
+                    col3.metric(
+                        "Laboratory Blocks",
+                        int(lab_total)
+                    )
+
+                    # -------------------------------------
+                    # DISPLAY GENERATED SESSIONS
+                    # -------------------------------------
+
+                    st.subheader(
+                        "Generated Scheduling Sessions"
+                    )
+
+                    st.dataframe(
+                        sessions_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                    # -------------------------------------
+                    # DOWNLOAD
+                    # -------------------------------------
+
+                    st.download_button(
+                        "Download Generated Sessions CSV",
+                        data=sessions_df.to_csv(
+                            index=False
+                        ).encode("utf-8"),
+                        file_name="GENERATED_SCHEDULING_SESSIONS.csv",
+                        mime="text/csv"
+                    )
+
+        else:
+
+            st.warning(
+                "Confirm Weekly Course Requirements first."
+            ) 
 # =========================================================
 # FOOTER
 # =========================================================
