@@ -582,31 +582,31 @@ elif page == "5. Upload & Retrieve Files":
 
            for key, info in review_data.items():
 
-                st.markdown(
-                    f"### {key.upper()} — {info['filename']}"
+            st.markdown(
+                f"### {key.upper()} — {info['filename']}"
+            )
+        
+            if info.get("type") == "excel":
+        
+                st.write("Worksheet:", info["sheet"])
+                st.write("Rows:", len(info["data"]))
+                st.write("Columns:", list(info["data"].columns))
+        
+                st.dataframe(
+                    info["data"],
+                    use_container_width=True
                 )
-            
-                if info.get("type") == "excel":
-            
-                    st.write("Worksheet:", info["sheet"])
-                    st.write("Rows:", len(info["data"]))
-                    st.write("Columns:", list(info["data"].columns))
-            
-                    st.dataframe(
-                        info["data"],
-                        use_container_width=True
-                    )
-            
-                elif info.get("type") == "document":
-            
-                    st.success("Document extracted successfully")
-            
-                    st.text_area(
-                        "Extracted Document Content",
-                        value=info["data"],
-                        height=400,
-                        key=f"preview_{key}"
-                    )
+        
+            elif info.get("type") == "document":
+        
+                st.success("Document extracted successfully")
+        
+                st.text_area(
+                    "Extracted Document Content",
+                    value=info["data"],
+                    height=400,
+                    key=f"preview_{key}"
+                )
             
                 else:
             
