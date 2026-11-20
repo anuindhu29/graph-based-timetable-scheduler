@@ -2629,6 +2629,7 @@ elif page == "8. Generate Timetable":
             st.warning(
                 "Confirm Weekly Course Requirements first."
             ) 
+    
 # =========================================================
 # FOOTER
 # =========================================================
