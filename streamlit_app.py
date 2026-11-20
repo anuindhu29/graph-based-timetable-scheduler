@@ -2242,22 +2242,29 @@ elif page == "8. Generate Timetable":
                         use_container_width=True
                     )
 
-            # -----------------------------------------
-            # SAVE REQUIREMENTS
-            # -----------------------------------------
-            st.divider()
+        # ---------------------------------------------
+        # SAVE REQUIREMENTS
+        # ---------------------------------------------
+        st.divider()
 
-            if st.button(
-                "Confirm Weekly Course Requirements",
-                type="primary",
-                use_container_width=True
+        if st.button(
+            "Confirm Weekly Course Requirements",
+            type="primary",
+            use_container_width=True
+        ):
+
+            # Require lab mapping only if lab courses exist
+            if (
+                not lab_courses.empty
+                and not st.session_state.get(
+                    "lab_mapping_confirmed",
+                    False
+                )
             ):
-            
-            if not st.session_state.get(
-                "lab_mapping_confirmed", False):
-            
+
                 st.error(
-                    "Please save Lab–Course Compatibility Mapping first."
+                    "Please save Lab–Course Compatibility "
+                    "Mapping first."
                 )
 
             else:
@@ -2285,6 +2292,30 @@ elif page == "8. Generate Timetable":
                     mime="text/csv"
                 )
 
+                # ---------------------------------------------
+                # NEXT STAGE INDICATOR
+                # ---------------------------------------------
+                if st.session_state.get(
+                    "course_requirements_confirmed",
+                    False
+                ):
+        
+                    st.success(
+                        "Course requirements are ready for "
+                        "scheduling session generation."
+                    )
+        
+                    st.info(
+                        """
+                        Next stage:
+        
+                        1. Generate individual theory sessions.
+                        2. Generate two-period laboratory blocks.
+                        3. Create section-specific scheduling tasks.
+                        4. Determine faculty candidate lists.
+                        5. Construct the scheduling conflict graph.
+                        """
+                    )
             # -----------------------------------------
             # NEXT STAGE INDICATOR
             # -----------------------------------------
