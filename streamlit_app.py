@@ -505,7 +505,7 @@ elif page == "5. Upload & Retrieve Files":
                         review_data[key] = {
                             "filename": file.name,
                             "type": "document",
-                            "paragraphs": paragraphs,
+                            "paragraphs": document.paragraphs,
                             "tables": tables_data
                         }
 
