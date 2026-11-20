@@ -363,9 +363,7 @@ elif page == "5. Upload & Retrieve Files":
 
     st.header("Upload Curriculum, Faculty and Infrastructure")
 
-    if not st.session_state.config.get(
-        "complete_confirmed", False
-    ):
+    if not st.session_state.config.get("complete_confirmed", False):
 
         st.warning(
             "Please complete and confirm the configuration "
@@ -374,9 +372,7 @@ elif page == "5. Upload & Retrieve Files":
 
     else:
 
-        academic = st.session_state.config[
-            "academic_programmes"
-        ]
+        academic = st.session_state.config["academic_programmes"]
 
         uploaded_files = {}
 
@@ -432,12 +428,13 @@ elif page == "5. Upload & Retrieve Files":
         # SCHEDULING RULES
         # -----------------------------
         st.subheader("Scheduling Rules and Constraints")
-        
+
         uploaded_files["rules"] = st.file_uploader(
             "Upload Timetable Scheduling Rules",
             type=["pdf", "docx", "txt"],
             key="rules_upload"
         )
+
         # =================================================
         # REVIEW UPLOADS
         # =================================================
@@ -448,7 +445,9 @@ elif page == "5. Upload & Retrieve Files":
 
             for key, file in uploaded_files.items():
 
+                # Skip curriculum if programme is excluded
                 if file is None:
+
                     if key in ["btech", "mtech"]:
                         continue
 
@@ -456,71 +455,139 @@ elif page == "5. Upload & Retrieve Files":
                     continue
 
                 try:
+
                     file_bytes = file.getvalue()
                     filename = file.name.lower()
 
-                    # -----------------------------
-                    # EXCEL FILES
-                    # -----------------------------
+                    # =====================================
+                    # EXCEL / SPREADSHEET
+                    # =====================================
                     if filename.endswith((".xlsx", ".xls", ".ods")):
 
-                        df = pd.read_excel(
-                            BytesIO(file_bytes)
-                        )
+                        df = pd.read_excel(BytesIO(file_bytes))
 
                         review_data[key] = {
                             "filename": file.name,
                             "type": "excel",
-                            "data": df
+                            "data": df,
+                            "raw_bytes": file_bytes
                         }
 
-                    # -----------------------------
+                    # =====================================
                     # WORD DOCUMENT
-                    # -----------------------------
+                    # =====================================
                     elif filename.endswith(".docx"):
 
-                        # Extract DOCX text
-                        file_bytes = file.getvalue()
-                        
-                        document = Document(BytesIO(file_bytes))
-                        
-                        document_text = "\n".join(
-                            p.text for p in document.paragraphs if p.text.strip()
-                        )
+                        doc = Document(BytesIO(file_bytes))
 
+                        # Extract actual paragraph TEXT
+                        paragraph_texts = [
+                            p.text.strip()
+                            for p in doc.paragraphs
+                            if p.text.strip()
+                        ]
+
+                        # Extract tables
                         tables_data = []
 
-                        for table in document.tables:
+                        for table in doc.tables:
+
                             table_data = []
 
                             for row in table.rows:
-                                table_data.append([
+
+                                row_data = [
                                     cell.text.strip()
                                     for cell in row.cells
-                                ])
+                                ]
+
+                                table_data.append(row_data)
 
                             tables_data.append(table_data)
+
+                        # Combine paragraphs and tables into text
+                        document_text = "\n\n".join(paragraph_texts)
+
+                        for table_index, table in enumerate(
+                            tables_data, start=1
+                        ):
+
+                            document_text += (
+                                f"\n\nTABLE {table_index}\n"
+                            )
+
+                            for row in table:
+
+                                document_text += (
+                                    " | ".join(row) + "\n"
+                                )
 
                         review_data[key] = {
                             "filename": file.name,
                             "type": "document",
-                            "paragraphs": document.paragraphs,
-                            "tables": tables_data
+                            "text": document_text,
+                            "paragraphs": paragraph_texts,
+                            "tables": tables_data,
+                            "raw_bytes": file_bytes
+                        }
+
+                    # =====================================
+                    # PDF DOCUMENT
+                    # =====================================
+                    elif filename.endswith(".pdf"):
+
+                        from PyPDF2 import PdfReader
+
+                        pdf_reader = PdfReader(BytesIO(file_bytes))
+
+                        pdf_text = "\n\n".join(
+                            page.extract_text() or ""
+                            for page in pdf_reader.pages
+                        )
+
+                        review_data[key] = {
+                            "filename": file.name,
+                            "type": "document",
+                            "text": pdf_text,
+                            "paragraphs": pdf_text.splitlines(),
+                            "tables": [],
+                            "raw_bytes": file_bytes
+                        }
+
+                    # =====================================
+                    # TEXT FILE
+                    # =====================================
+                    elif filename.endswith(".txt"):
+
+                        document_text = file_bytes.decode(
+                            "utf-8",
+                            errors="replace"
+                        )
+
+                        review_data[key] = {
+                            "filename": file.name,
+                            "type": "document",
+                            "text": document_text,
+                            "paragraphs": document_text.splitlines(),
+                            "tables": [],
+                            "raw_bytes": file_bytes
                         }
 
                     else:
+
                         errors.append(
                             f"{file.name}: Unsupported file format"
                         )
 
                 except Exception as e:
+
                     errors.append(
                         f"{file.name}: {str(e)}"
                     )
 
-            # -----------------------------
+            # =============================================
             # DISPLAY ERRORS
-            # -----------------------------
+            # =============================================
             if errors:
 
                 st.error("Please correct the following:")
@@ -528,9 +595,9 @@ elif page == "5. Upload & Retrieve Files":
                 for error in errors:
                     st.write("❌", error)
 
-            # -----------------------------
+            # =============================================
             # DISPLAY REVIEW DATA
-            # -----------------------------
+            # =============================================
             else:
 
                 st.session_state.uploaded_data = review_data
@@ -544,31 +611,53 @@ elif page == "5. Upload & Retrieve Files":
                         f"### {key.upper()} — {info['filename']}"
                     )
 
-                    if info.get("type") == "excel":
+                    # ---------------------------------
+                    # EXCEL REVIEW
+                    # ---------------------------------
+                    if info["type"] == "excel":
 
-                        st.write("Rows:", len(info["data"]))
+                        df = info["data"]
+
+                        st.write("Rows:", len(df))
+
                         st.write(
                             "Columns:",
-                            list(info["data"].columns)
+                            list(df.columns)
                         )
 
                         st.dataframe(
-                            info["data"],
+                            df,
                             use_container_width=True
                         )
 
-                    elif info.get("type") == "document":
+                    # ---------------------------------
+                    # DOCUMENT REVIEW
+                    # ---------------------------------
+                    elif info["type"] == "document":
 
                         st.success(
                             "Document extracted successfully"
                         )
 
-                        if info["paragraphs"]:
+                        if info["text"].strip():
+
                             st.markdown("#### Document Text")
 
-                            for paragraph in info["paragraphs"]:
-                                st.write(paragraph)
+                            st.text_area(
+                                "Extracted text",
+                                value=info["text"],
+                                height=350,
+                                key=f"review_text_{key}"
+                            )
 
+                        else:
+
+                            st.warning(
+                                "No readable text was extracted "
+                                "from this document."
+                            )
+
+                        # Display extracted tables
                         if info["tables"]:
 
                             st.markdown("#### Document Tables")
@@ -582,15 +671,16 @@ elif page == "5. Upload & Retrieve Files":
                                 )
 
                                 if table_data:
-                                    df = pd.DataFrame(
-                                        table_data[1:],
-                                        columns=table_data[0]
+
+                                    table_df = pd.DataFrame(
+                                        table_data
                                     )
 
                                     st.dataframe(
-                                        df,
+                                        table_df,
                                         use_container_width=True
                                     )
+
         # =================================================
         # CONFIRM FILES
         # =================================================
@@ -607,83 +697,130 @@ elif page == "5. Upload & Retrieve Files":
                 st.session_state.files_confirmed = True
 
                 st.success(
-                    "Uploaded files confirmed and retrieved!"
+                    "Uploaded files confirmed successfully!"
                 )
 
-       # =================================================
+        # =================================================
         # RETRIEVE STORED DATA
         # =================================================
         if st.session_state.uploaded_data:
-        
+
             st.divider()
+
             st.subheader("Retrieve Uploaded Data")
-        
-            file_options = list(st.session_state.uploaded_data.keys())
-        
+
+            file_options = list(
+                st.session_state.uploaded_data.keys()
+            )
+
             selected_file = st.selectbox(
                 "Select dataset",
-                file_options
+                file_options,
+                key="retrieve_dataset"
             )
-        
-            selected_info = st.session_state.uploaded_data[selected_file]
-        
-            # ---------------------------------------------
-            # EXCEL DATASET
-            # ---------------------------------------------
-            if selected_info.get("type") == "excel":
-        
+
+            selected_info = (
+                st.session_state.uploaded_data[selected_file]
+            )
+
+            st.write(
+                "**Filename:**",
+                selected_info["filename"]
+            )
+
+            # =============================================
+            # RETRIEVE EXCEL
+            # =============================================
+            if selected_info["type"] == "excel":
+
                 dataset = selected_info["data"]
-        
+
                 st.dataframe(
                     dataset,
                     use_container_width=True
                 )
-        
-                # CSV download
+
+                # CSV DOWNLOAD
                 st.download_button(
                     "Download Retrieved Dataset as CSV",
-                    dataset.to_csv(index=False).encode("utf-8"),
+                    data=dataset.to_csv(
+                        index=False
+                    ).encode("utf-8"),
                     file_name=f"{selected_file}_retrieved.csv",
-                    mime="text/csv"
+                    mime="text/csv",
+                    key=f"csv_download_{selected_file}"
                 )
-                
-                # Excel download
-                excel_buffer = io.BytesIO()
-                
-                with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-                    dataset.to_excel(writer, index=False, sheet_name="Data")
-                
+
+                # EXCEL DOWNLOAD
+                excel_buffer = BytesIO()
+
+                with pd.ExcelWriter(
+                    excel_buffer,
+                    engine="openpyxl"
+                ) as writer:
+
+                    dataset.to_excel(
+                        writer,
+                        index=False,
+                        sheet_name="Data"
+                    )
+
                 st.download_button(
                     "Download Dataset as Excel",
                     data=excel_buffer.getvalue(),
                     file_name=f"{selected_file}_retrieved.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime=(
+                        "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                    key=f"excel_download_{selected_file}"
                 )
-                        
-            # ---------------------------------------------
-            # DOCUMENT / RULES FILE
-            # ---------------------------------------------
-            elif selected_info.get("type") == "document":
-        
-                st.success("Document uploaded and extracted successfully.")
-        
-                st.write("**Filename:**", selected_info.get("filename"))
-        
-                if selected_info.get("text"):
-        
+
+            # =============================================
+            # RETRIEVE DOCUMENT
+            # =============================================
+            elif selected_info["type"] == "document":
+
+                st.success(
+                    "Document uploaded and extracted successfully."
+                )
+
+                document_text = selected_info.get("text", "")
+
+                if document_text.strip():
+
                     st.subheader("Extracted Document Content")
-        
+
                     st.text_area(
                         "Document text",
-                        selected_info["text"],
-                        height=400
+                        value=document_text,
+                        height=400,
+                        key=f"retrieve_text_{selected_file}"
                     )
-        
+
+                    # DOWNLOAD EXTRACTED TEXT
+                    st.download_button(
+                        "Download Extracted Text",
+                        data=document_text.encode("utf-8"),
+                        file_name=f"{selected_file}_extracted.txt",
+                        mime="text/plain",
+                        key=f"text_download_{selected_file}"
+                    )
+
                 else:
-        
+
                     st.warning(
-                        "The document was uploaded, but no extracted text is available."
+                        "The document was uploaded, but no readable "
+                        "text was extracted."
                     )
+
+                # DOWNLOAD ORIGINAL FILE
+                st.download_button(
+                    "Download Original Document",
+                    data=selected_info["raw_bytes"],
+                    file_name=selected_info["filename"],
+                    key=f"original_download_{selected_file}"
+                )
 # =========================================================
 # 6. GENERATE TIMETABLE
 # =========================================================
