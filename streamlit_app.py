@@ -573,6 +573,97 @@ elif page == "5. Upload & Retrieve Files":
                 file_name=f"{selected_file}_retrieved.csv",
                 mime="text/csv"
             )
+# =========================================================
+# 6. GENERATE TIMETABLE
+# =========================================================
+elif page == "6. Generate Timetable":
+
+    st.header("🗓️ Generate Academic Timetable")
+
+    st.markdown(
+        "Generate a conflict-free timetable using the configured "
+        "academic programmes, faculty, classrooms and laboratories."
+    )
+
+    # -----------------------------------------
+    # CHECK CONFIGURATION
+    # -----------------------------------------
+    if not st.session_state.config.get(
+        "complete_confirmed", False
+    ):
+
+        st.warning(
+            "⚠️ Please complete and confirm Programme Configuration "
+            "before proceeding."
+        )
+
+    elif not st.session_state.get(
+        "files_confirmed", False
+    ):
+
+        st.warning(
+            "⚠️ Please upload, review and confirm all required datasets "
+            "before generating the timetable."
+        )
+
+    else:
+
+        st.success(
+            "✅ Configuration and uploaded datasets are ready."
+        )
+
+        st.subheader("Dataset Summary")
+
+        uploaded_data = st.session_state.uploaded_data
+
+        cols = st.columns(4)
+
+        for i, (key, info) in enumerate(
+            uploaded_data.items()
+        ):
+
+            with cols[i % 4]:
+
+                st.metric(
+                    key.upper(),
+                    len(info["data"])
+                )
+
+        st.divider()
+
+        st.subheader("Scheduling Engine")
+
+        st.info(
+            """
+            The scheduling engine will use:
+
+            • Graph-based conflict representation  
+            • Faculty constraints  
+            • Student section constraints  
+            • Classroom and laboratory constraints  
+            • Faculty workload constraints  
+            • Laboratory continuity constraints  
+            • Google OR-Tools CP-SAT solver
+            """
+        )
+
+        st.warning(
+            "The timetable generation engine will be connected "
+            "in the next development step."
+        )
+
+        # -----------------------------------------
+        # GENERATION BUTTON
+        # -----------------------------------------
+        if st.button(
+            "🚀 Generate Timetable",
+            type="primary",
+            use_container_width=True
+        ):
+
+            st.info(
+                "Scheduling engine integration is the next step."
+            )
 
 # =========================================================
 # FOOTER
