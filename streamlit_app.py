@@ -3,7 +3,7 @@ import pandas as pd
 import json
 from datetime import datetime
 from io import BytesIO
-
+from docx import Document
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -640,20 +640,27 @@ elif page == "5. Upload & Retrieve Files":
                     use_container_width=True
                 )
         
+                # CSV download
                 st.download_button(
                     "Download Retrieved Dataset as CSV",
-                    dataset.to_csv(index=False),
+                    dataset.to_csv(index=False).encode("utf-8"),
                     file_name=f"{selected_file}_retrieved.csv",
                     mime="text/csv"
                 )
-        
+                
+                # Excel download
+                excel_buffer = io.BytesIO()
+                
+                with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+                    dataset.to_excel(writer, index=False, sheet_name="Data")
+                
                 st.download_button(
                     "Download Dataset as Excel",
-                    dataset.to_excel(index=False),
+                    data=excel_buffer.getvalue(),
                     file_name=f"{selected_file}_retrieved.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-        
+                        
             # ---------------------------------------------
             # DOCUMENT / RULES FILE
             # ---------------------------------------------
