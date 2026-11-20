@@ -40,7 +40,7 @@ page = st.sidebar.radio(
         "2. Academic Calendar",
         "3. Faculty Workload",
         "4. Configuration Review",
-        "5. Upload & Retrieve Files"
+        "5. Upload & Retrieve Files",
         "6. Generate Timetable"
     ]
 )
