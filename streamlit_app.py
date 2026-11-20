@@ -457,109 +457,111 @@ elif page == "5. Upload & Retrieve Files":
                     )
 
                     continue
-
+                    
                 try:
-
+                
                     file_bytes = file.getvalue()
-
                     file_ext = file.name.lower().split(".")[-1]
-                    
+                
+                    # =========================
+                    # EXCEL FILES
+                    # =========================
                     if file_ext in ["xlsx", "xls", "ods"]:
-                    
+                
                         excel = pd.ExcelFile(BytesIO(file_bytes))
-                    
                         sheet_name = excel.sheet_names[0]
-                    
+                
                         df = pd.read_excel(
                             BytesIO(file_bytes),
                             sheet_name=sheet_name
                         )
-                    
+                
                         review_data[key] = {
                             "filename": file.name,
                             "sheet": sheet_name,
                             "data": df,
                             "type": "excel"
                         }
-                    
+                
+                    # =========================
+                    # WORD DOCUMENT
+                    # =========================
                     elif file_ext == "docx":
-                    
+                
                         from docx import Document
-                    
+                
                         doc = Document(BytesIO(file_bytes))
-                    
+                
                         extracted_parts = []
-                    
-                        # Extract paragraphs
+                
                         for paragraph in doc.paragraphs:
-                    
                             if paragraph.text.strip():
-                    
-                                extracted_parts.append(
-                                    paragraph.text.strip()
-                                )
-                    
-                        # Extract tables
+                                extracted_parts.append(paragraph.text.strip())
+                
                         for table in doc.tables:
-                    
                             for row in table.rows:
-                    
                                 row_text = " | ".join(
                                     cell.text.strip()
                                     for cell in row.cells
                                 )
-                    
+                
                                 if row_text.strip():
-                    
                                     extracted_parts.append(row_text)
-                    
+                
                         text_content = "\n".join(extracted_parts)
-                    
+                
                         review_data[key] = {
                             "filename": file.name,
                             "data": text_content,
                             "type": "document"
                         }
+                
+                    # =========================
+                    # TEXT FILE
+                    # =========================
                     elif file_ext == "txt":
-                    
+                
                         text_content = file_bytes.decode(
                             "utf-8",
                             errors="ignore"
                         )
-                    
+                
                         review_data[key] = {
                             "filename": file.name,
                             "data": text_content,
                             "type": "document"
                         }
-                    
+                
+                    # =========================
+                    # PDF FILE
+                    # =========================
                     elif file_ext == "pdf":
-                    
+                
                         import PyPDF2
-                    
+                
                         pdf_reader = PyPDF2.PdfReader(
                             BytesIO(file_bytes)
                         )
-                    
+                
                         text_content = "\n".join(
                             page.extract_text() or ""
                             for page in pdf_reader.pages
                         )
-                    
+                
                         review_data[key] = {
                             "filename": file.name,
                             "data": text_content,
                             "type": "document"
                         }
-
-                    review_data[key] = {
-                        "filename": file.name,
-                        "sheet": sheet_name,
-                        "data": df
-                    }
-
+                
+                    else:
+                
+                        errors.append(
+                            f"Unsupported file format: {file.name}"
+                        )
+                
                 except Exception as e:
-
+                
                     errors.append(
                         f"{file.name}: {str(e)}"
                     )
@@ -578,8 +580,8 @@ elif page == "5. Upload & Retrieve Files":
 
                 st.success("Files read successfully!")
 
-            for key, info in review_data.items():
-            
+           for key, info in review_data.items():
+
                 st.markdown(
                     f"### {key.upper()} — {info['filename']}"
                 )
