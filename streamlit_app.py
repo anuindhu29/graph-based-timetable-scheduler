@@ -1699,27 +1699,40 @@ elif page == "8. Generate Timetable":
                     "M.Tech curriculum was not uploaded."
                 )
 
-        # ---------------------------------------------
-        # COMBINE CURRICULUM
-        # ---------------------------------------------
-        if course_datasets:
-
-            curriculum = pd.concat(
-                course_datasets,
-                ignore_index=True
+            # ---------------------------------------------
+            # COMBINE CURRICULUM
+            # ---------------------------------------------
+    
+            st.write(
+                "DEBUG course_datasets count:",
+                len(course_datasets)
             )
-           st.write("DEBUG course_datasets count:", len(course_datasets))
-
-        if course_datasets:
-             st.write("DEBUG first dataset shape:", course_datasets[0].shape)
-             st.write("DEBUG all dataset shapes:", [df.shape for df in course_datasets])
-            
-            curriculum.columns = (
-                curriculum.columns
-                .astype(str)
-                .str.strip()
-            )
-
+    
+            if course_datasets:
+    
+                st.write(
+                    "DEBUG dataset shapes:",
+                    [df.shape for df in course_datasets]
+                )
+    
+                curriculum = pd.concat(
+                    course_datasets,
+                    ignore_index=True
+                )
+    
+                curriculum.columns = (
+                    curriculum.columns
+                    .astype(str)
+                    .str.strip()
+                )
+    
+            else:
+    
+                st.error(
+                    "No curriculum dataset is available for processing."
+                )
+    
+                st.stop()
             # -----------------------------------------
             # CLEAN NUMERIC FIELDS
             # -----------------------------------------
