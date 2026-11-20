@@ -822,7 +822,525 @@ elif page == "5. Upload & Retrieve Files":
                     file_name=selected_info["filename"],
                     key=f"original_download_{selected_file}"
                 )
-                
+# =========================================================
+# 6. FACULTY CONSTRAINTS & HOD APPROVAL
+# =========================================================
+elif page == "6. Faculty Constraints & HOD Approval":
+
+    st.header("Faculty Constraints & HOD Approval")
+
+    # -----------------------------------------------------
+    # CHECK PREVIOUS STEPS
+    # -----------------------------------------------------
+    if not st.session_state.get("files_confirmed", False):
+
+        st.warning(
+            "Please upload, review and confirm the faculty "
+            "dataset before proceeding."
+        )
+
+    elif "faculty" not in st.session_state.uploaded_data:
+
+        st.error(
+            "Faculty dataset is missing. Upload the faculty "
+            "Excel file in Page 5."
+        )
+
+    else:
+
+        faculty_df = st.session_state.uploaded_data[
+            "faculty"
+        ]["data"].copy()
+
+        # -------------------------------------------------
+        # IDENTIFY FACULTY COLUMNS
+        # -------------------------------------------------
+        def find_column(df, possible_names):
+
+            normalized = {
+                str(col).strip().lower().replace("_", " "): col
+                for col in df.columns
+            }
+
+            for name in possible_names:
+
+                name = name.strip().lower().replace("_", " ")
+
+                if name in normalized:
+                    return normalized[name]
+
+            return None
+
+        id_col = find_column(
+            faculty_df,
+            [
+                "Faculty ID",
+                "Faculty_ID",
+                "ID",
+                "Employee ID"
+            ]
+        )
+
+        name_col = find_column(
+            faculty_df,
+            [
+                "Faculty Name",
+                "Faculty_Name",
+                "Name",
+                "Faculty"
+            ]
+        )
+
+        designation_col = find_column(
+            faculty_df,
+            [
+                "Designation",
+                "Position",
+                "Academic Designation"
+            ]
+        )
+
+        # -------------------------------------------------
+        # BUILD FACULTY MASTER
+        # -------------------------------------------------
+        if name_col is None:
+
+            st.error(
+                "Could not identify the Faculty Name column "
+                "in your uploaded Excel file."
+            )
+
+            st.write(
+                "Available columns:",
+                list(faculty_df.columns)
+            )
+
+        else:
+
+            if id_col is None:
+                faculty_df["Faculty_ID"] = (
+                    faculty_df.index + 1
+                ).astype(str)
+
+                id_col = "Faculty_ID"
+
+            if designation_col is None:
+                faculty_df["Designation"] = "Unknown"
+
+                designation_col = "Designation"
+
+            faculty_master = (
+                faculty_df[
+                    [id_col, name_col, designation_col]
+                ]
+                .drop_duplicates(subset=[id_col])
+                .copy()
+            )
+
+            faculty_master.columns = [
+                "Faculty_ID",
+                "Faculty_Name",
+                "Designation"
+            ]
+
+            faculty_master["Faculty_ID"] = (
+                faculty_master["Faculty_ID"]
+                .astype(str)
+                .str.strip()
+            )
+
+            faculty_master["Faculty_Name"] = (
+                faculty_master["Faculty_Name"]
+                .astype(str)
+                .str.strip()
+            )
+
+            faculty_master["Designation"] = (
+                faculty_master["Designation"]
+                .astype(str)
+                .str.strip()
+            )
+
+            faculty_master = faculty_master[
+                faculty_master["Faculty_Name"] != ""
+            ].reset_index(drop=True)
+
+            st.success(
+                f"Faculty records loaded: {len(faculty_master)}"
+            )
+
+            st.dataframe(
+                faculty_master,
+                use_container_width=True
+            )
+
+            # -------------------------------------------------
+            # CALENDAR INFORMATION
+            # -------------------------------------------------
+            calendar = st.session_state.config.get(
+                "calendar", {}
+            )
+
+            working_days = calendar.get(
+                "working_days",
+                [
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday"
+                ]
+            )
+
+            college_start = calendar.get(
+                "college_start",
+                "08:30"
+            )
+
+            college_end = calendar.get(
+                "college_end",
+                "17:00"
+            )
+
+            period_duration = int(
+                calendar.get(
+                    "period_duration",
+                    50
+                )
+            )
+
+            morning_break = calendar.get(
+                "morning_break",
+                {"start": "10:10", "end": "10:30"}
+            )
+
+            lunch = calendar.get(
+                "lunch",
+                {"start": "12:10", "end": "13:30"}
+            )
+
+            afternoon_break = calendar.get(
+                "afternoon_break",
+                {"start": "14:20", "end": "14:30"}
+            )
+
+            # -------------------------------------------------
+            # GENERATE VALID PERIODS
+            # -------------------------------------------------
+            def time_to_minutes(value):
+
+                hour, minute = map(
+                    int,
+                    str(value).split(":")[:2]
+                )
+
+                return hour * 60 + minute
+
+            def minutes_to_time(value):
+
+                return (
+                    f"{value // 60:02d}:"
+                    f"{value % 60:02d}"
+                )
+
+            breaks = [
+                (
+                    time_to_minutes(morning_break["start"]),
+                    time_to_minutes(morning_break["end"])
+                ),
+                (
+                    time_to_minutes(lunch["start"]),
+                    time_to_minutes(lunch["end"])
+                ),
+                (
+                    time_to_minutes(afternoon_break["start"]),
+                    time_to_minutes(afternoon_break["end"])
+                )
+            ]
+
+            valid_periods = []
+
+            start_minutes = time_to_minutes(college_start)
+            end_minutes = time_to_minutes(college_end)
+
+            for day in working_days:
+
+                current = start_minutes
+                period_number = 1
+
+                while current + period_duration <= end_minutes:
+
+                    period_end = current + period_duration
+
+                    overlapping_break = None
+
+                    for break_start, break_end in breaks:
+
+                        if (
+                            current < break_end
+                            and period_end > break_start
+                        ):
+
+                            overlapping_break = break_end
+                            break
+
+                    if overlapping_break is not None:
+
+                        current = overlapping_break
+                        continue
+
+                    valid_periods.append({
+                        "Day": day,
+                        "Period": period_number,
+                        "Start_Time": minutes_to_time(current),
+                        "End_Time": minutes_to_time(period_end)
+                    })
+
+                    current += period_duration
+                    period_number += 1
+
+            slot_options = [
+                (
+                    f"{p['Day']} | "
+                    f"{p['Start_Time']}-{p['End_Time']}",
+                    (
+                        f"{p['Day']}|"
+                        f"{p['Start_Time']}|"
+                        f"{p['End_Time']}"
+                    )
+                )
+                for p in valid_periods
+            ]
+
+            # -------------------------------------------------
+            # YEAR OPTIONS
+            # -------------------------------------------------
+            btech_years = [
+                "Year 1",
+                "Year 2",
+                "Year 3",
+                "Year 4"
+            ]
+
+            mtech_years = [
+                "Year 1",
+                "Year 2"
+            ]
+
+            # -------------------------------------------------
+            # FACULTY FORMS
+            # -------------------------------------------------
+            st.divider()
+
+            st.subheader(
+                "Individual Faculty Approval and Availability"
+            )
+
+            st.info(
+                "Select unavailable days or time slots only. "
+                "Leave both empty if the faculty member is "
+                "available throughout the week."
+            )
+
+            faculty_forms = {}
+
+            for _, faculty in faculty_master.iterrows():
+
+                faculty_id = str(faculty["Faculty_ID"])
+                faculty_name = str(faculty["Faculty_Name"])
+                designation = str(faculty["Designation"])
+
+                is_senior = (
+                    "assistant" not in designation.lower()
+                    and "professor" in designation.lower()
+                )
+
+                with st.expander(
+                    f"{faculty_name} | {faculty_id} | {designation}",
+                    expanded=False
+                ):
+
+                    st.markdown("#### Programme Approval")
+
+                    btech_approved = st.checkbox(
+                        "Approved for B.Tech",
+                        value=True,
+                        key=f"btech_approved_{faculty_id}"
+                    )
+
+                    selected_btech_years = st.multiselect(
+                        "B.Tech Years Approved",
+                        btech_years,
+                        default=btech_years,
+                        key=f"btech_years_{faculty_id}"
+                    )
+
+                    mtech_approved = st.checkbox(
+                        "Approved for M.Tech",
+                        value=is_senior,
+                        key=f"mtech_approved_{faculty_id}"
+                    )
+
+                    selected_mtech_years = st.multiselect(
+                        "M.Tech Years Approved",
+                        mtech_years,
+                        default=mtech_years if is_senior else [],
+                        key=f"mtech_years_{faculty_id}"
+                    )
+
+                    st.markdown("#### Availability Restrictions")
+
+                    unavailable_days = st.multiselect(
+                        "Unavailable Days",
+                        working_days,
+                        default=[],
+                        key=f"unavailable_days_{faculty_id}"
+                    )
+
+                    unavailable_slots = st.multiselect(
+                        "Unavailable Time Slots",
+                        options=[
+                            label for label, value in slot_options
+                        ],
+                        key=f"unavailable_slots_{faculty_id}"
+                    )
+
+                    st.markdown("#### HOD Approval")
+
+                    approved_by = st.text_input(
+                        "Approved By (HOD)",
+                        key=f"approved_by_{faculty_id}"
+                    )
+
+                    remarks = st.text_area(
+                        "Remarks / Additional Restrictions",
+                        key=f"remarks_{faculty_id}"
+                    )
+
+                    faculty_forms[faculty_id] = {
+                        "name": faculty_name,
+                        "designation": designation,
+                        "btech_approved": btech_approved,
+                        "btech_years": selected_btech_years,
+                        "mtech_approved": mtech_approved,
+                        "mtech_years": selected_mtech_years,
+                        "unavailable_days": unavailable_days,
+                        "unavailable_slots": unavailable_slots,
+                        "approved_by": approved_by,
+                        "remarks": remarks
+                    }
+
+            # -------------------------------------------------
+            # SAVE FACULTY CONSTRAINTS
+            # -------------------------------------------------
+            if st.button(
+                "Save Faculty Constraints and Approvals",
+                type="primary",
+                use_container_width=True
+            ):
+
+                approval_records = []
+                constraint_records = []
+                errors = []
+
+                for faculty_id, form in faculty_forms.items():
+
+                    if (
+                        form["btech_approved"]
+                        and not form["btech_years"]
+                    ):
+
+                        errors.append(
+                            f"{form['name']}: Select at least "
+                            "one B.Tech year."
+                        )
+
+                    if (
+                        form["mtech_approved"]
+                        and not form["mtech_years"]
+                    ):
+
+                        errors.append(
+                            f"{form['name']}: Select at least "
+                            "one M.Tech year."
+                        )
+
+                    if (
+                        form["mtech_approved"]
+                        and "assistant" in form["designation"].lower()
+                        and not form["approved_by"].strip()
+                    ):
+
+                        errors.append(
+                            f"{form['name']}: HOD name is required "
+                            "for Assistant Professor M.Tech approval."
+                        )
+
+                if errors:
+
+                    st.error("Please correct the following:")
+
+                    for error in errors:
+                        st.write("❌", error)
+
+                else:
+
+                    for faculty_id, form in faculty_forms.items():
+
+                        approval_records.append({
+                            "Faculty_ID": faculty_id,
+                            "Faculty_Name": form["name"],
+                            "Designation": form["designation"],
+                            "BTech_Approved": form["btech_approved"],
+                            "BTech_Years": form["btech_years"],
+                            "MTech_Approved": form["mtech_approved"],
+                            "MTech_Years": form["mtech_years"],
+                            "Approved_By": form["approved_by"],
+                            "Remarks": form["remarks"]
+                        })
+
+                        constraint_records.append({
+                            "Faculty_ID": faculty_id,
+                            "Faculty_Name": form["name"],
+                            "Unavailable_Days": form["unavailable_days"],
+                            "Unavailable_Slots": form["unavailable_slots"]
+                        })
+
+                    st.session_state.faculty_approvals = (
+                        approval_records
+                    )
+
+                    st.session_state.faculty_constraints = (
+                        constraint_records
+                    )
+
+                    st.session_state.faculty_constraints_confirmed = True
+
+                    st.session_state.config[
+                        "faculty_approvals"
+                    ] = approval_records
+
+                    st.session_state.config[
+                        "faculty_constraints"
+                    ] = constraint_records
+
+                    st.success(
+                        "Faculty constraints and approvals saved successfully!"
+                    )
+
+                    st.subheader("Approval Summary")
+
+                    st.dataframe(
+                        pd.DataFrame(approval_records),
+                        use_container_width=True
+                    )
+
+                    st.subheader("Availability Restrictions")
+
+                    st.dataframe(
+                        pd.DataFrame(constraint_records),
+                        use_container_width=True
+                    )                
 # =========================================================
 # 7. GENERATE TIMETABLE
 # =========================================================
