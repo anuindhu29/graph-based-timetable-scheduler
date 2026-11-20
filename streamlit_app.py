@@ -448,124 +448,80 @@ elif page == "5. Upload & Retrieve Files":
             for key, file in uploaded_files.items():
 
                 if file is None:
-
                     if key in ["btech", "mtech"]:
                         continue
 
-                    errors.append(
-                        f"Missing required file: {key}"
-                    )
-
+                    errors.append(f"Missing required file: {key}")
                     continue
-                    
+
                 try:
-                
                     file_bytes = file.getvalue()
-                    file_ext = file.name.lower().split(".")[-1]
-                
-                    # =========================
+                    filename = file.name.lower()
+
+                    # -----------------------------
                     # EXCEL FILES
-                    # =========================
-                    if file_ext in ["xlsx", "xls", "ods"]:
-                
-                        excel = pd.ExcelFile(BytesIO(file_bytes))
-                        sheet_name = excel.sheet_names[0]
-                
+                    # -----------------------------
+                    if filename.endswith((".xlsx", ".xls", ".ods")):
+
                         df = pd.read_excel(
-                            BytesIO(file_bytes),
-                            sheet_name=sheet_name
-                        )
-                
-                        review_data[key] = {
-                            "filename": file.name,
-                            "sheet": sheet_name,
-                            "data": df,
-                            "type": "excel"
-                        }
-                
-                    # =========================
-                    # WORD DOCUMENT
-                    # =========================
-                    elif file_ext == "docx":
-                
-                        from docx import Document
-                
-                        doc = Document(BytesIO(file_bytes))
-                
-                        extracted_parts = []
-                
-                        for paragraph in doc.paragraphs:
-                            if paragraph.text.strip():
-                                extracted_parts.append(paragraph.text.strip())
-                
-                        for table in doc.tables:
-                            for row in table.rows:
-                                row_text = " | ".join(
-                                    cell.text.strip()
-                                    for cell in row.cells
-                                )
-                
-                                if row_text.strip():
-                                    extracted_parts.append(row_text)
-                
-                        text_content = "\n".join(extracted_parts)
-                
-                        review_data[key] = {
-                            "filename": file.name,
-                            "data": text_content,
-                            "type": "document"
-                        }
-                
-                    # =========================
-                    # TEXT FILE
-                    # =========================
-                    elif file_ext == "txt":
-                
-                        text_content = file_bytes.decode(
-                            "utf-8",
-                            errors="ignore"
-                        )
-                
-                        review_data[key] = {
-                            "filename": file.name,
-                            "data": text_content,
-                            "type": "document"
-                        }
-                
-                    # =========================
-                    # PDF FILE
-                    # =========================
-                    elif file_ext == "pdf":
-                
-                        import PyPDF2
-                
-                        pdf_reader = PyPDF2.PdfReader(
                             BytesIO(file_bytes)
                         )
-                
-                        text_content = "\n".join(
-                            page.extract_text() or ""
-                            for page in pdf_reader.pages
-                        )
-                
+
                         review_data[key] = {
                             "filename": file.name,
-                            "data": text_content,
-                            "type": "document"
+                            "type": "excel",
+                            "data": df
                         }
-                
-                    else:
-                
-                        errors.append(
-                            f"Unsupported file format: {file.name}"
+
+                    # -----------------------------
+                    # WORD DOCUMENT
+                    # -----------------------------
+                    elif filename.endswith(".docx"):
+
+                        from docx import Document
+
+                        document = Document(
+                            BytesIO(file_bytes)
                         )
-                
+
+                        paragraphs = [
+                            p.text for p in document.paragraphs
+                            if p.text.strip()
+                        ]
+
+                        tables_data = []
+
+                        for table in document.tables:
+                            table_data = []
+
+                            for row in table.rows:
+                                table_data.append([
+                                    cell.text.strip()
+                                    for cell in row.cells
+                                ])
+
+                            tables_data.append(table_data)
+
+                        review_data[key] = {
+                            "filename": file.name,
+                            "type": "document",
+                            "paragraphs": paragraphs,
+                            "tables": tables_data
+                        }
+
+                    else:
+                        errors.append(
+                            f"{file.name}: Unsupported file format"
+                        )
+
                 except Exception as e:
-                
                     errors.append(
                         f"{file.name}: {str(e)}"
                     )
 
+            # -----------------------------
+            # DISPLAY ERRORS
+            # -----------------------------
             if errors:
 
                 st.error("Please correct the following:")
@@ -573,6 +529,9 @@ elif page == "5. Upload & Retrieve Files":
                 for error in errors:
                     st.write("❌", error)
 
+            # -----------------------------
+            # DISPLAY REVIEW DATA
+            # -----------------------------
             else:
 
                 st.session_state.uploaded_data = review_data
@@ -580,37 +539,59 @@ elif page == "5. Upload & Retrieve Files":
 
                 st.success("Files read successfully!")
 
-           for key, info in review_data.items():
+                for key, info in review_data.items():
 
-            st.markdown(
-                f"### {key.upper()} — {info['filename']}"
-            )
-        
-            if info.get("type") == "excel":
-        
-                st.write("Worksheet:", info["sheet"])
-                st.write("Rows:", len(info["data"]))
-                st.write("Columns:", list(info["data"].columns))
-        
-                st.dataframe(
-                    info["data"],
-                    use_container_width=True
-                )
-        
-            elif info.get("type") == "document":
-        
-                st.success("Document extracted successfully")
-        
-                st.text_area(
-                    "Extracted Document Content",
-                    value=info["data"],
-                    height=400,
-                    key=f"preview_{key}"
-                )
-            
-                else:
-            
-                    st.warning("Unknown file format")
+                    st.markdown(
+                        f"### {key.upper()} — {info['filename']}"
+                    )
+
+                    if info.get("type") == "excel":
+
+                        st.write("Rows:", len(info["data"]))
+                        st.write(
+                            "Columns:",
+                            list(info["data"].columns)
+                        )
+
+                        st.dataframe(
+                            info["data"],
+                            use_container_width=True
+                        )
+
+                    elif info.get("type") == "document":
+
+                        st.success(
+                            "Document extracted successfully"
+                        )
+
+                        if info["paragraphs"]:
+                            st.markdown("#### Document Text")
+
+                            for paragraph in info["paragraphs"]:
+                                st.write(paragraph)
+
+                        if info["tables"]:
+
+                            st.markdown("#### Document Tables")
+
+                            for table_index, table_data in enumerate(
+                                info["tables"], start=1
+                            ):
+
+                                st.write(
+                                    f"Table {table_index}"
+                                )
+
+                                if table_data:
+                                    df = pd.DataFrame(
+                                        table_data[1:],
+                                        columns=table_data[0]
+                                    )
+
+                                    st.dataframe(
+                                        df,
+                                        use_container_width=True
+                                    )
         # =================================================
         # CONFIRM FILES
         # =================================================
