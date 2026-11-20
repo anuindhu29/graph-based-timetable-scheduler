@@ -462,16 +462,75 @@ elif page == "5. Upload & Retrieve Files":
 
                     file_bytes = file.getvalue()
 
-                    excel = pd.ExcelFile(
-                        BytesIO(file_bytes)
-                    )
-
-                    sheet_name = excel.sheet_names[0]
-
-                    df = pd.read_excel(
-                        BytesIO(file_bytes),
-                        sheet_name=sheet_name
-                    )
+                    file_ext = file.name.lower().split(".")[-1]
+                    
+                    if file_ext in ["xlsx", "xls", "ods"]:
+                    
+                        excel = pd.ExcelFile(BytesIO(file_bytes))
+                    
+                        sheet_name = excel.sheet_names[0]
+                    
+                        df = pd.read_excel(
+                            BytesIO(file_bytes),
+                            sheet_name=sheet_name
+                        )
+                    
+                        review_data[key] = {
+                            "filename": file.name,
+                            "sheet": sheet_name,
+                            "data": df,
+                            "type": "excel"
+                        }
+                    
+                    elif file_ext == "docx":
+                    
+                        from docx import Document
+                    
+                        doc = Document(BytesIO(file_bytes))
+                    
+                        text_content = "\n".join(
+                            paragraph.text
+                            for paragraph in doc.paragraphs
+                            if paragraph.text.strip()
+                        )
+                    
+                        review_data[key] = {
+                            "filename": file.name,
+                            "data": text_content,
+                            "type": "document"
+                        }
+                    
+                    elif file_ext == "txt":
+                    
+                        text_content = file_bytes.decode(
+                            "utf-8",
+                            errors="ignore"
+                        )
+                    
+                        review_data[key] = {
+                            "filename": file.name,
+                            "data": text_content,
+                            "type": "document"
+                        }
+                    
+                    elif file_ext == "pdf":
+                    
+                        import PyPDF2
+                    
+                        pdf_reader = PyPDF2.PdfReader(
+                            BytesIO(file_bytes)
+                        )
+                    
+                        text_content = "\n".join(
+                            page.extract_text() or ""
+                            for page in pdf_reader.pages
+                        )
+                    
+                        review_data[key] = {
+                            "filename": file.name,
+                            "data": text_content,
+                            "type": "document"
+                        }
 
                     review_data[key] = {
                         "filename": file.name,
