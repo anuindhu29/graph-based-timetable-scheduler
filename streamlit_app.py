@@ -1707,6 +1707,10 @@ elif page == "8. Generate Timetable":
                 course_datasets,
                 ignore_index=True
             )
+            st.write("DEBUG course_datasets count:", len(course_datasets))
+
+            if course_datasets:
+            st.write("DEBUG first dataset shape:", course_datasets[0].shape)
 
             curriculum.columns = (
                 curriculum.columns
