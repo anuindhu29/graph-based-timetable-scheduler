@@ -5,6 +5,7 @@ from datetime import datetime
 from io import BytesIO
 from docx import Document
 import io
+
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -1707,11 +1708,12 @@ elif page == "8. Generate Timetable":
                 course_datasets,
                 ignore_index=True
             )
-            st.write("DEBUG course_datasets count:", len(course_datasets))
+           st.write("DEBUG course_datasets count:", len(course_datasets))
 
-            if course_datasets:
-            st.write("DEBUG first dataset shape:", course_datasets[0].shape)
-
+        if course_datasets:
+             st.write("DEBUG first dataset shape:", course_datasets[0].shape)
+             st.write("DEBUG all dataset shapes:", [df.shape for df in course_datasets])
+            
             curriculum.columns = (
                 curriculum.columns
                 .astype(str)
