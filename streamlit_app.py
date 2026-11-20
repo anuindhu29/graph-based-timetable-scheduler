@@ -482,24 +482,44 @@ elif page == "5. Upload & Retrieve Files":
                             "type": "excel"
                         }
                     
-                    elif file_ext == "docx":
-                    
-                        from docx import Document
-                    
-                        doc = Document(BytesIO(file_bytes))
-                    
-                        text_content = "\n".join(
-                            paragraph.text
-                            for paragraph in doc.paragraphs
-                            if paragraph.text.strip()
-                        )
-                    
-                        review_data[key] = {
-                            "filename": file.name,
-                            "data": text_content,
-                            "type": "document"
-                        }
-                    
+                        elif file_ext == "docx":
+                        
+                            from docx import Document
+                        
+                            doc = Document(BytesIO(file_bytes))
+                        
+                            extracted_parts = []
+                        
+                            # Extract paragraphs
+                            for paragraph in doc.paragraphs:
+                        
+                                if paragraph.text.strip():
+                        
+                                    extracted_parts.append(
+                                        paragraph.text.strip()
+                                    )
+                        
+                            # Extract tables
+                            for table in doc.tables:
+                        
+                                for row in table.rows:
+                        
+                                    row_text = " | ".join(
+                                        cell.text.strip()
+                                        for cell in row.cells
+                                    )
+                        
+                                    if row_text.strip():
+                        
+                                        extracted_parts.append(row_text)
+                        
+                            text_content = "\n".join(extracted_parts)
+                        
+                            review_data[key] = {
+                                "filename": file.name,
+                                "data": text_content,
+                                "type": "document"
+                            }
                     elif file_ext == "txt":
                     
                         text_content = file_bytes.decode(
@@ -558,32 +578,37 @@ elif page == "5. Upload & Retrieve Files":
 
                 st.success("Files read successfully!")
 
-                for key, info in review_data.items():
-
-                    st.markdown(
-                        f"### {key.upper()} — {info['filename']}"
-                    )
-
-                    st.write(
-                        "Worksheet:",
-                        info["sheet"]
-                    )
-
-                    st.write(
-                        "Rows:",
-                        len(info["data"])
-                    )
-
-                    st.write(
-                        "Columns:",
-                        list(info["data"].columns)
-                    )
-
+            for key, info in review_data.items():
+            
+                st.markdown(
+                    f"### {key.upper()} — {info['filename']}"
+                )
+            
+                if info.get("type") == "excel":
+            
+                    st.write("Worksheet:", info["sheet"])
+                    st.write("Rows:", len(info["data"]))
+                    st.write("Columns:", list(info["data"].columns))
+            
                     st.dataframe(
                         info["data"],
                         use_container_width=True
                     )
-
+            
+                elif info.get("type") == "document":
+            
+                    st.success("Document extracted successfully")
+            
+                    st.text_area(
+                        "Extracted Document Content",
+                        value=info["data"],
+                        height=400,
+                        key=f"preview_{key}"
+                    )
+            
+                else:
+            
+                    st.warning("Unknown file format")
         # =================================================
         # CONFIRM FILES
         # =================================================
