@@ -482,44 +482,44 @@ elif page == "5. Upload & Retrieve Files":
                             "type": "excel"
                         }
                     
-                        elif file_ext == "docx":
-                        
-                            from docx import Document
-                        
-                            doc = Document(BytesIO(file_bytes))
-                        
-                            extracted_parts = []
-                        
-                            # Extract paragraphs
-                            for paragraph in doc.paragraphs:
-                        
-                                if paragraph.text.strip():
-                        
-                                    extracted_parts.append(
-                                        paragraph.text.strip()
-                                    )
-                        
-                            # Extract tables
-                            for table in doc.tables:
-                        
-                                for row in table.rows:
-                        
-                                    row_text = " | ".join(
-                                        cell.text.strip()
-                                        for cell in row.cells
-                                    )
-                        
-                                    if row_text.strip():
-                        
-                                        extracted_parts.append(row_text)
-                        
-                            text_content = "\n".join(extracted_parts)
-                        
-                            review_data[key] = {
-                                "filename": file.name,
-                                "data": text_content,
-                                "type": "document"
-                            }
+                    elif file_ext == "docx":
+                    
+                        from docx import Document
+                    
+                        doc = Document(BytesIO(file_bytes))
+                    
+                        extracted_parts = []
+                    
+                        # Extract paragraphs
+                        for paragraph in doc.paragraphs:
+                    
+                            if paragraph.text.strip():
+                    
+                                extracted_parts.append(
+                                    paragraph.text.strip()
+                                )
+                    
+                        # Extract tables
+                        for table in doc.tables:
+                    
+                            for row in table.rows:
+                    
+                                row_text = " | ".join(
+                                    cell.text.strip()
+                                    for cell in row.cells
+                                )
+                    
+                                if row_text.strip():
+                    
+                                    extracted_parts.append(row_text)
+                    
+                        text_content = "\n".join(extracted_parts)
+                    
+                        review_data[key] = {
+                            "filename": file.name,
+                            "data": text_content,
+                            "type": "document"
+                        }
                     elif file_ext == "txt":
                     
                         text_content = file_bytes.decode(
