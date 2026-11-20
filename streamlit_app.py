@@ -2363,17 +2363,6 @@ elif page == "8. Generate Timetable":
                     5. Construct the scheduling conflict graph.
                     """
                 )
-
-        else:
-
-            st.error(
-                "No curriculum dataset is available for processing."
-            )
-
-            st.info(
-                "Scheduling engine integration is the next step."
-            )
-
 # =========================================================
 # FOOTER
 # =========================================================
