@@ -478,14 +478,14 @@ elif page == "5. Upload & Retrieve Files":
                     # -----------------------------
                     elif filename.endswith(".docx"):
 
-                        from docx import Document
-
                         # Extract DOCX text
-                        doc = Document(BytesIO(file_bytes))
+                        file_bytes = file.getvalue()
+                        
+                        document = Document(BytesIO(file_bytes))
                         
                         document_text = "\n".join(
                             paragraph.text
-                            for paragraph in doc.paragraphs
+                            for paragraph in document.paragraphs
                             if paragraph.text.strip()
                         )
 
