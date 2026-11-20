@@ -1623,35 +1623,463 @@ elif page == "8. Generate Timetable":
 
         st.divider()
 
-        st.subheader("Scheduling Engine")
+        # =================================================
+        # COURSE PROCESSING & WEEKLY REQUIREMENTS
+        # =================================================
 
-        st.info(
-            """
-            The scheduling engine will use:
+        st.subheader("Course Processing & Weekly Requirements")
 
-            • Graph-based conflict representation  
-            • Faculty constraints  
-            • Student section constraints  
-            • Classroom and laboratory constraints  
-            • Faculty workload constraints  
-            • Laboratory continuity constraints  
-            • Google OR-Tools CP-SAT solver
-            """
-        )
+        academic_config = st.session_state.config[
+            "academic_programmes"
+        ]
 
-        st.warning(
-            "The timetable generation engine will be connected "
-            "in the next development step."
-        )
+        semester_type = academic_config["semester_type"]
 
-        # -----------------------------------------
-        # GENERATION BUTTON
-        # -----------------------------------------
-        if st.button(
-            "🚀 Generate Timetable",
-            type="primary",
-            use_container_width=True
-        ):
+        if semester_type == "Odd":
+            btech_active_semesters = [3, 5, 7]
+            mtech_active_semesters = [1, 3]
+        else:
+            btech_active_semesters = [4, 6, 8]
+            mtech_active_semesters = [2, 4]
+
+        course_datasets = []
+
+        # ---------------------------------------------
+        # LOAD B.TECH CURRICULUM
+        # ---------------------------------------------
+        if academic_config["B.Tech"]["included"]:
+
+            if "btech" in uploaded_data:
+
+                btech_df = uploaded_data["btech"]["data"].copy()
+
+                btech_df["Programme_Type"] = "B.Tech"
+
+                course_datasets.append(btech_df)
+
+            else:
+
+                st.warning(
+                    "B.Tech curriculum was not uploaded."
+                )
+
+        # ---------------------------------------------
+        # LOAD M.TECH CURRICULUM
+        # ---------------------------------------------
+        if academic_config["M.Tech"]["included"]:
+
+            if "mtech" in uploaded_data:
+
+                mtech_df = uploaded_data["mtech"]["data"].copy()
+
+                mtech_df["Programme_Type"] = "M.Tech"
+
+                course_datasets.append(mtech_df)
+
+            else:
+
+                st.warning(
+                    "M.Tech curriculum was not uploaded."
+                )
+
+        # ---------------------------------------------
+        # COMBINE CURRICULUM
+        # ---------------------------------------------
+        if course_datasets:
+
+            curriculum = pd.concat(
+                course_datasets,
+                ignore_index=True
+            )
+
+            curriculum.columns = (
+                curriculum.columns
+                .astype(str)
+                .str.strip()
+            )
+
+            # -----------------------------------------
+            # CLEAN NUMERIC FIELDS
+            # -----------------------------------------
+            numeric_columns = [
+                "Semester",
+                "L_Hours",
+                "T_Hours",
+                "P_Hours",
+                "Credits"
+            ]
+
+            for column in numeric_columns:
+
+                if column in curriculum.columns:
+
+                    curriculum[column] = pd.to_numeric(
+                        curriculum[column],
+                        errors="coerce"
+                    ).fillna(0)
+
+            # -----------------------------------------
+            # FILTER ACTIVE SEMESTERS
+            # -----------------------------------------
+            active_rows = []
+
+            for _, course in curriculum.iterrows():
+
+                programme = course["Programme_Type"]
+
+                semester = int(course["Semester"])
+
+                if programme == "B.Tech":
+
+                    if semester in btech_active_semesters:
+                        active_rows.append(course)
+
+                elif programme == "M.Tech":
+
+                    if semester in mtech_active_semesters:
+                        active_rows.append(course)
+
+            active_curriculum = pd.DataFrame(
+                active_rows
+            )
+
+            st.write(
+                "Selected semester configuration:",
+                semester_type
+            )
+
+            st.write(
+                "B.Tech semesters:",
+                btech_active_semesters
+                if academic_config["B.Tech"]["included"]
+                else "Not included"
+            )
+
+            st.write(
+                "M.Tech semesters:",
+                mtech_active_semesters
+                if academic_config["M.Tech"]["included"]
+                else "Not included"
+            )
+
+            # -----------------------------------------
+            # REQUIREMENT CALCULATION
+            # -----------------------------------------
+            scheduling_requirements = []
+
+            excluded_courses = []
+
+            for _, course in active_curriculum.iterrows():
+
+                course_id = str(
+                    course["Course_ID"]
+                ).strip()
+
+                course_name = str(
+                    course["Course_Name"]
+                ).strip()
+
+                programme = course["Programme_Type"]
+
+                semester = int(
+                    course["Semester"]
+                )
+
+                category = str(
+                    course.get("Category", "")
+                )
+
+                L = int(course["L_Hours"])
+                T = int(course["T_Hours"])
+                P = int(course["P_Hours"])
+                credits = int(course["Credits"])
+
+                course_type = str(
+                    course.get(
+                        "Course_Type (Theory, Tutorial, Practical/Lab, or Elective)",
+                        ""
+                    )
+                ).strip()
+
+                combined_text = (
+                    course_name + " " + course_type
+                ).lower()
+
+                # -------------------------------------
+                # EXCLUDE NON-REGULAR SCHEDULING ITEMS
+                # -------------------------------------
+                excluded_keywords = [
+                    "internship",
+                    "industrial training",
+                    "academic attachment",
+                    "project work",
+                    "online courses",
+                    "nptel",
+                    "comprehensive viva",
+                    "viva voce"
+                ]
+
+                is_excluded = any(
+                    keyword in combined_text
+                    for keyword in excluded_keywords
+                )
+
+                if is_excluded:
+
+                    excluded_courses.append({
+                        "Programme": programme,
+                        "Semester": semester,
+                        "Course_ID": course_id,
+                        "Course_Name": course_name,
+                        "Reason": "Non-regular classroom scheduling"
+                    })
+
+                    continue
+
+                # -------------------------------------
+                # CALCULATE WEEKLY THEORY AND LAB
+                # -------------------------------------
+                theory_sessions = 0
+                lab_sessions = 0
+                lab_periods = 0
+
+                # Theory + practical
+                if L > 0 and P > 0:
+
+                    theory_sessions = 3
+
+                    lab_sessions = 1
+
+                    lab_periods = 2
+
+                    course_classification = (
+                        "Theory + Lab"
+                    )
+
+                # Practical / lab only
+                elif L == 0 and P > 0:
+
+                    theory_sessions = 0
+
+                    lab_sessions = 1
+
+                    lab_periods = 2
+
+                    course_classification = (
+                        "Lab Only"
+                    )
+
+                # Theory only
+                elif L > 0 and P == 0:
+
+                    if credits == 3:
+
+                        theory_sessions = 3
+
+                    elif credits == 4:
+
+                        theory_sessions = 4
+
+                    else:
+
+                        theory_sessions = L + T
+
+                    lab_sessions = 0
+
+                    lab_periods = 0
+
+                    course_classification = (
+                        "Theory Only"
+                    )
+
+                else:
+
+                    excluded_courses.append({
+                        "Programme": programme,
+                        "Semester": semester,
+                        "Course_ID": course_id,
+                        "Course_Name": course_name,
+                        "Reason": "No weekly teaching hours"
+                    })
+
+                    continue
+
+                # -------------------------------------
+                # TOTAL WEEKLY PERIODS
+                # -------------------------------------
+                total_weekly_periods = (
+                    theory_sessions
+                    + lab_periods
+                )
+
+                scheduling_requirements.append({
+
+                    "Programme": programme,
+
+                    "Semester": semester,
+
+                    "Course_ID": course_id,
+
+                    "Course_Name": course_name,
+
+                    "Category": category,
+
+                    "Credits": credits,
+
+                    "L_Hours": L,
+
+                    "T_Hours": T,
+
+                    "P_Hours": P,
+
+                    "Classification": course_classification,
+
+                    "Theory_Sessions_Per_Week": theory_sessions,
+
+                    "Lab_Sessions_Per_Week": lab_sessions,
+
+                    "Lab_Consecutive_Periods": lab_periods,
+
+                    "Total_Weekly_Periods": total_weekly_periods
+
+                })
+
+            # -----------------------------------------
+            # DISPLAY REQUIREMENTS
+            # -----------------------------------------
+            requirements_df = pd.DataFrame(
+                scheduling_requirements
+            )
+
+            st.divider()
+
+            st.subheader(
+                "Calculated Weekly Course Requirements"
+            )
+
+            if not requirements_df.empty:
+
+                st.dataframe(
+                    requirements_df,
+                    use_container_width=True
+                )
+
+                col1, col2, col3, col4 = st.columns(4)
+
+                col1.metric(
+                    "Courses",
+                    len(requirements_df)
+                )
+
+                col2.metric(
+                    "Theory Sessions",
+                    int(
+                        requirements_df[
+                            "Theory_Sessions_Per_Week"
+                        ].sum()
+                    )
+                )
+
+                col3.metric(
+                    "Lab Sessions",
+                    int(
+                        requirements_df[
+                            "Lab_Sessions_Per_Week"
+                        ].sum()
+                    )
+                )
+
+                col4.metric(
+                    "Total Weekly Periods",
+                    int(
+                        requirements_df[
+                            "Total_Weekly_Periods"
+                        ].sum()
+                    )
+                )
+
+            # -----------------------------------------
+            # EXCLUDED COURSES
+            # -----------------------------------------
+            if excluded_courses:
+
+                with st.expander(
+                    "View Excluded Courses"
+                ):
+
+                    excluded_df = pd.DataFrame(
+                        excluded_courses
+                    )
+
+                    st.dataframe(
+                        excluded_df,
+                        use_container_width=True
+                    )
+
+            # -----------------------------------------
+            # SAVE REQUIREMENTS
+            # -----------------------------------------
+            st.divider()
+
+            if st.button(
+                "Confirm Weekly Course Requirements",
+                type="primary",
+                use_container_width=True
+            ):
+
+                st.session_state.course_requirements = (
+                    requirements_df.copy()
+                )
+
+                st.session_state.course_requirements_confirmed = True
+
+                st.session_state.config[
+                    "course_requirements"
+                ] = scheduling_requirements
+
+                st.success(
+                    "Weekly course requirements confirmed!"
+                )
+
+                st.download_button(
+                    "Download Weekly Requirements",
+                    data=requirements_df.to_csv(
+                        index=False
+                    ).encode("utf-8"),
+                    file_name="WEEKLY_COURSE_REQUIREMENTS.csv",
+                    mime="text/csv"
+                )
+
+            # -----------------------------------------
+            # NEXT STAGE INDICATOR
+            # -----------------------------------------
+            if st.session_state.get(
+                "course_requirements_confirmed",
+                False
+            ):
+
+                st.success(
+                    "Course requirements are ready for "
+                    "scheduling session generation."
+                )
+
+                st.info(
+                    """
+                    Next stage:
+
+                    1. Generate individual theory sessions.
+                    2. Generate two-period laboratory blocks.
+                    3. Create section-specific scheduling tasks.
+                    4. Determine faculty candidate lists.
+                    5. Construct the scheduling conflict graph.
+                    """
+                )
+
+        else:
+
+            st.error(
+                "No curriculum dataset is available for processing."
+            )
 
             st.info(
                 "Scheduling engine integration is the next step."
