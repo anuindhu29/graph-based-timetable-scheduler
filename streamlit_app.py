@@ -427,6 +427,16 @@ elif page == "5. Upload & Retrieve Files":
             key="rooms_upload"
         )
 
+        # -----------------------------
+        # SCHEDULING RULES
+        # -----------------------------
+        st.subheader("Scheduling Rules and Constraints")
+        
+        uploaded_files["rules"] = st.file_uploader(
+            "Upload Timetable Scheduling Rules",
+            type=["pdf", "docx", "txt"],
+            key="rules_upload"
+        )
         # =================================================
         # REVIEW UPLOADS
         # =================================================
