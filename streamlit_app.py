@@ -1656,6 +1656,10 @@ elif page == "8. Generate Timetable":
 
         course_datasets = []
 
+        st.write("DEBUG uploaded_data keys:", list(uploaded_data.keys()))
+        st.write("DEBUG B.Tech included:", academic_config["B.Tech"]["included"])
+        st.write("DEBUG M.Tech included:", academic_config["M.Tech"]["included"])
+
         # ---------------------------------------------
         # LOAD B.TECH CURRICULUM
         # ---------------------------------------------
