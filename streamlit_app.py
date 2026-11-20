@@ -1609,16 +1609,28 @@ elif page == "8. Generate Timetable":
         uploaded_data = st.session_state.uploaded_data
 
         cols = st.columns(4)
-
+        
         for i, (key, info) in enumerate(
             uploaded_data.items()
         ):
-
+        
             with cols[i % 4]:
-
+        
+                if info.get("type") == "excel":
+        
+                    count = len(info["data"])
+        
+                elif info.get("type") == "document":
+        
+                    count = "Document"
+        
+                else:
+        
+                    count = "N/A"
+        
                 st.metric(
                     key.upper(),
-                    len(info["data"])
+                    count
                 )
 
         st.divider()
