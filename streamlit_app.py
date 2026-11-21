@@ -6128,13 +6128,6 @@ elif page == "8. Generate Timetable":
                     "No conditional relationships were detected."
                 )
             
-            else:
-            
-                st.info(
-                    "No conditional relationships were detected."
-                )
-            
-            
             # ------------------------------------------------------------
             # 15. DOWNLOAD GRAPH DATA
             # ------------------------------------------------------------
