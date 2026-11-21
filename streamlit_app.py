@@ -5510,27 +5510,52 @@ elif page == "8. Generate Timetable":
                     else "No common candidate time slots"
                 )
                 
+                source_faculty = sorted(
+                    graph_clean_list(
+                        source_data["Eligible_Faculty"]
+                    )
+                )
+                
+                target_faculty = sorted(
+                    graph_clean_list(
+                        target_data["Eligible_Faculty"]
+                    )
+                )
+                
+                source_faculty_text = (
+                    ", ".join(source_faculty)
+                    if source_faculty
+                    else "None"
+                )
+                
+                target_faculty_text = (
+                    ", ".join(target_faculty)
+                    if target_faculty
+                    else "None"
+                )
+                
                 edge_hover.append(
                 
                     f"<b>⚠ FIXED TIMETABLE CONFLICT</b><br><br>"
                 
                     f"<b>Session A:</b> {source}<br>"
                     f"<b>Subject:</b> {source_data['Course_Title']}<br>"
-                    f"<b>Course Code:</b> {source_data['Course_Code']}<br><br>"
+                    f"<b>Course Code:</b> {source_data['Course_Code']}<br>"
+                    f"<b>Faculty Candidates:</b> {source_faculty_text}<br><br>"
                 
                     f"<b>Session B:</b> {target}<br>"
                     f"<b>Subject:</b> {target_data['Course_Title']}<br>"
-                    f"<b>Course Code:</b> {target_data['Course_Code']}<br><br>"
+                    f"<b>Course Code:</b> {target_data['Course_Code']}<br>"
+                    f"<b>Faculty Candidates:</b> {target_faculty_text}<br><br>"
                 
                     f"<b>Section:</b> {edge['Section_ID']}<br><br>"
                 
-                    f"<b>Conflict:</b> Both sessions belong to the "
-                    f"same student section.<br>"
+                    f"<b>Conflict:</b> Both sessions belong to "
+                    f"the same student section.<br>"
                 
                     f"<b>Constraint:</b> They cannot be scheduled "
                     f"on the same day and time slot."
-                )
-                                            
+                )                    
             
             # ------------------------------------------------------------
             # 10. PREPARE NODE DATA
