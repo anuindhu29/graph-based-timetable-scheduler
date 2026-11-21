@@ -5114,464 +5114,1000 @@ elif page == "8. Generate Timetable":
                 EMPTY_DOMAIN_SESSIONS
             )
 
-                        # =================================================
+            # =================================================
             # CELL 21: CONFLICT GRAPH CONSTRUCTION
             # =================================================
 
-            st.divider()
+# ============================================================
+# CELL 21: CONFLICT GRAPH + INTERACTIVE EXPLORER
+# ============================================================
 
-            st.header("Conflict Graph Construction")
+import networkx as nx
+import plotly.graph_objects as go
+import numpy as np
+import math
 
-            # -------------------------------------------------
-            # 1. GRAPH NODES
-            # -------------------------------------------------
+st.divider()
+st.header("Conflict Graph Construction")
 
-            GRAPH_NODES = {}
+# ------------------------------------------------------------
+# 1. GRAPH VERTICES
+# ------------------------------------------------------------
 
-            for _, session in SCHEDULING_SESSIONS.iterrows():
+GRAPH_VERTICES = {}
 
-                session_id = str(session["Session_ID"])
+for _, session in SCHEDULING_SESSIONS.iterrows():
 
-                GRAPH_NODES[session_id] = {
+    session_id = str(session["Session_ID"])
 
-                    "Session_ID": session_id,
+    GRAPH_VERTICES[session_id] = {
 
-                    "Section_ID": str(
-                        session["Section_ID"]
-                    ),
+        "Session_ID": session_id,
+        "Section_ID": str(session["Section_ID"]),
+        "Programme": str(session["Programme"]),
+        "Semester": str(session["Semester"]),
+        "Section": str(session["Section"]),
+        "Course_Code": str(session["Course_Code"]),
+        "Course_Title": str(session["Course_Title"]),
+        "Session_Type": str(session["Session_Type"]),
+        "Periods_Required": session["Periods_Required"],
+        "Consecutive": session["Consecutive"],
+        "Eligible_Faculty": session["Eligible_Faculty"],
+        "Fixed_Classroom": session["Fixed_Classroom"],
+        "Candidate_Labs": session["Candidate_Labs"]
+    }
 
-                    "Course_Code": str(
-                        session["Course_Code"]
-                    ),
 
-                    "Course_Title": str(
-                        session["Course_Title"]
-                    ),
+# ------------------------------------------------------------
+# 2. HELPER FUNCTIONS
+# ------------------------------------------------------------
 
-                    "Session_Type": str(
-                        session["Session_Type"]
-                    ),
+def graph_clean_list(values):
 
-                    "Eligible_Faculty": (
-                        session["Eligible_Faculty"]
-                    ),
+    if values is None:
+        return set()
 
-                    "Fixed_Classroom": (
-                        session["Fixed_Classroom"]
-                    ),
+    if isinstance(values, str):
+        return {values.strip()} if values.strip() else set()
 
-                    "Candidate_Labs": (
-                        session["Candidate_Labs"]
-                    )
-                }
+    try:
+        return {
+            str(v).strip()
+            for v in values
+            if pd.notna(v)
+        }
 
-            # -------------------------------------------------
-            # 2. HELPER FUNCTIONS
-            # -------------------------------------------------
+    except TypeError:
+        return set()
 
-            def clean_list(values):
 
-                if values is None:
-                    return set()
+def graph_candidate_resources(data):
 
-                if isinstance(values, float) and pd.isna(values):
-                    return set()
+    if data["Session_Type"] == "Theory":
 
-                if isinstance(values, str):
-                    return {values.strip()}
+        classroom = data["Fixed_Classroom"]
 
-                try:
+        if classroom is None or pd.isna(classroom):
+            return set()
 
-                    return {
-                        str(value).strip()
-                        for value in values
-                        if pd.notna(value)
+        return {str(classroom).strip()}
+
+    return graph_clean_list(
+        data["Candidate_Labs"]
+    )
+
+
+# ------------------------------------------------------------
+# 3. FIXED CONFLICT EDGES
+#    Sessions belonging to the same section cannot overlap.
+# ------------------------------------------------------------
+
+STATIC_GRAPH_EDGES = []
+
+session_ids = list(GRAPH_VERTICES.keys())
+
+for i in range(len(session_ids)):
+
+    session_a_id = session_ids[i]
+    session_a = GRAPH_VERTICES[session_a_id]
+
+    for j in range(i + 1, len(session_ids)):
+
+        session_b_id = session_ids[j]
+        session_b = GRAPH_VERTICES[session_b_id]
+
+        if (
+            session_a["Section_ID"]
+            == session_b["Section_ID"]
+        ):
+
+            STATIC_GRAPH_EDGES.append({
+
+                "Source": session_a_id,
+                "Target": session_b_id,
+
+                "Conflict_Type": "SECTION_CONFLICT",
+
+                "Description": (
+                    "Both sessions belong to the same "
+                    "student section and cannot overlap."
+                ),
+
+                "Section_ID": session_a["Section_ID"]
+
+            })
+
+
+# ------------------------------------------------------------
+# 4. CONDITIONAL CONFLICTS
+#    These are NOT drawn as fixed graph edges.
+# ------------------------------------------------------------
+
+CONDITIONAL_CONFLICTS = []
+
+for i in range(len(session_ids)):
+
+    session_a_id = session_ids[i]
+    session_a = GRAPH_VERTICES[session_a_id]
+
+    faculty_a = graph_clean_list(
+        session_a["Eligible_Faculty"]
+    )
+
+    resources_a = graph_candidate_resources(
+        session_a
+    )
+
+    for j in range(i + 1, len(session_ids)):
+
+        session_b_id = session_ids[j]
+        session_b = GRAPH_VERTICES[session_b_id]
+
+        faculty_b = graph_clean_list(
+            session_b["Eligible_Faculty"]
+        )
+
+        resources_b = graph_candidate_resources(
+            session_b
+        )
+
+        common_faculty = (
+            faculty_a.intersection(faculty_b)
+        )
+
+        common_resources = (
+            resources_a.intersection(resources_b)
+        )
+
+        if common_faculty:
+
+            CONDITIONAL_CONFLICTS.append({
+
+                "Session_A": session_a_id,
+                "Session_B": session_b_id,
+
+                "Conflict_Type": "FACULTY_CONFLICT",
+
+                "Common_Faculty_Candidates": (
+                    sorted(common_faculty)
+                ),
+
+                "Common_Resources": []
+
+            })
+
+        if common_resources:
+
+            CONDITIONAL_CONFLICTS.append({
+
+                "Session_A": session_a_id,
+                "Session_B": session_b_id,
+
+                "Conflict_Type": "RESOURCE_CONFLICT",
+
+                "Common_Faculty_Candidates": [],
+
+                "Common_Resources": (
+                    sorted(common_resources)
+                )
+
+            })
+
+
+# ------------------------------------------------------------
+# 5. BUILD NETWORKX GRAPH
+# ------------------------------------------------------------
+
+G_CONFLICT = nx.Graph()
+
+for session_id, data in GRAPH_VERTICES.items():
+
+    G_CONFLICT.add_node(
+        session_id,
+        **data
+    )
+
+for edge in STATIC_GRAPH_EDGES:
+
+    G_CONFLICT.add_edge(
+        edge["Source"],
+        edge["Target"],
+        conflict_type=edge["Conflict_Type"],
+        description=edge["Description"],
+        section_id=edge["Section_ID"]
+    )
+
+
+ADJACENCY_LIST = {
+    node: set(G_CONFLICT.neighbors(node))
+    for node in G_CONFLICT.nodes()
+}
+
+
+# ------------------------------------------------------------
+# 6. GRAPH STATISTICS
+# ------------------------------------------------------------
+
+total_nodes = G_CONFLICT.number_of_nodes()
+total_edges = G_CONFLICT.number_of_edges()
+
+degrees = dict(
+    G_CONFLICT.degree()
+)
+
+maximum_degree = (
+    max(degrees.values())
+    if degrees
+    else 0
+)
+
+average_degree = (
+    sum(degrees.values()) / total_nodes
+    if total_nodes
+    else 0
+)
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "Graph Nodes",
+    total_nodes
+)
+
+col2.metric(
+    "Fixed Conflict Edges",
+    total_edges
+)
+
+col3.metric(
+    "Maximum Degree",
+    maximum_degree
+)
+
+col4.metric(
+    "Average Degree",
+    round(average_degree, 2)
+)
+
+
+# ------------------------------------------------------------
+# 7. SAVE GRAPH DATA FOR FUTURE CSP ALGORITHMS
+# ------------------------------------------------------------
+
+st.session_state.GRAPH_VERTICES = GRAPH_VERTICES
+
+st.session_state.STATIC_GRAPH_EDGES = (
+    STATIC_GRAPH_EDGES
+)
+
+st.session_state.ADJACENCY_LIST = (
+    ADJACENCY_LIST
+)
+
+st.session_state.CONDITIONAL_CONFLICTS = (
+    CONDITIONAL_CONFLICTS
+)
+
+st.session_state.G_CONFLICT = G_CONFLICT
+
+
+# ------------------------------------------------------------
+# 8. LAYOUT — SEPARATE CONNECTED COMPONENTS
+# ------------------------------------------------------------
+
+components = sorted(
+    nx.connected_components(G_CONFLICT),
+    key=len,
+    reverse=True
+)
+
+positions = {}
+
+component_count = len(components)
+
+layout_columns = max(
+    1,
+    math.ceil(math.sqrt(component_count))
+)
+
+for component_index, component in enumerate(components):
+
+    nodes = sorted(component)
+
+    row = component_index // layout_columns
+    col = component_index % layout_columns
+
+    center_x = col * 10.0
+    center_y = -row * 10.0
+
+    node_count = len(nodes)
+
+    radius = max(
+        1.5,
+        node_count * 0.20
+    )
+
+    for node_index, node in enumerate(nodes):
+
+        angle = (
+            2 * math.pi * node_index
+            / max(1, node_count)
+        )
+
+        positions[node] = (
+
+            center_x
+            + radius * math.cos(angle),
+
+            center_y
+            + radius * math.sin(angle)
+
+        )
+
+
+# ------------------------------------------------------------
+# 9. PREPARE GRAPH EDGES
+# ------------------------------------------------------------
+
+edge_x = []
+edge_y = []
+
+edge_mid_x = []
+edge_mid_y = []
+
+edge_customdata = []
+edge_hover = []
+
+for edge_index, edge in enumerate(
+    STATIC_GRAPH_EDGES
+):
+
+    source = edge["Source"]
+    target = edge["Target"]
+
+    x1, y1 = positions[source]
+    x2, y2 = positions[target]
+
+    edge_x.extend([
+        x1,
+        x2,
+        None
+    ])
+
+    edge_y.extend([
+        y1,
+        y2,
+        None
+    ])
+
+    edge_mid_x.append(
+        (x1 + x2) / 2
+    )
+
+    edge_mid_y.append(
+        (y1 + y2) / 2
+    )
+
+    edge_customdata.append(
+        edge_index
+    )
+
+    edge_hover.append(
+
+        f"<b>SECTION CONFLICT</b><br>"
+        f"{source} ↔ {target}<br>"
+        f"Section: {edge['Section_ID']}<br>"
+        f"Click to inspect conflict"
+    )
+
+
+# ------------------------------------------------------------
+# 10. PREPARE NODE DATA
+# ------------------------------------------------------------
+
+node_x = []
+node_y = []
+
+node_customdata = []
+node_colors = []
+node_hover = []
+
+for node, data in GRAPH_VERTICES.items():
+
+    x, y = positions[node]
+
+    node_x.append(x)
+    node_y.append(y)
+
+    node_customdata.append(node)
+
+    if data["Session_Type"] == "Theory":
+
+        node_colors.append("#2878C8")
+
+    else:
+
+        node_colors.append("#E58A32")
+
+    node_hover.append(
+
+        f"<b>{data['Course_Title']}</b><br>"
+        f"Session: {node}<br>"
+        f"Course Code: {data['Course_Code']}<br>"
+        f"Programme: {data['Programme']}<br>"
+        f"Semester: {data['Semester']}<br>"
+        f"Section: {data['Section']}<br>"
+        f"Type: {data['Session_Type']}<br>"
+        f"Periods: {data['Periods_Required']}<br>"
+        f"Fixed Conflict Degree: {degrees[node]}<br>"
+        f"Faculty Candidates: "
+        f"{len(graph_clean_list(data['Eligible_Faculty']))}<br>"
+        f"<b>Click to inspect session</b>"
+    )
+
+
+# ------------------------------------------------------------
+# 11. INTERACTIVE PLOTLY GRAPH
+# ------------------------------------------------------------
+
+fig = go.Figure()
+
+
+# Fixed graph edges
+fig.add_trace(
+
+    go.Scatter(
+
+        x=edge_x,
+        y=edge_y,
+
+        mode="lines",
+
+        line=dict(
+            color="rgba(100,100,100,0.55)",
+            width=1.2
+        ),
+
+        hoverinfo="skip",
+
+        name="Fixed Section Conflicts"
+
+    )
+)
+
+
+# Selectable edge markers
+fig.add_trace(
+
+    go.Scatter(
+
+        x=edge_mid_x,
+        y=edge_mid_y,
+
+        mode="markers",
+
+        marker=dict(
+            size=12,
+            color="rgba(100,100,100,0.02)"
+        ),
+
+        customdata=edge_customdata,
+
+        text=edge_hover,
+
+        hovertemplate=(
+            "%{text}<extra></extra>"
+        ),
+
+        name="Select Conflict Edge"
+
+    )
+)
+
+
+# Interactive nodes
+fig.add_trace(
+
+    go.Scatter(
+
+        x=node_x,
+        y=node_y,
+
+        mode="markers+text",
+
+        text=node_customdata,
+
+        textposition="top center",
+
+        textfont=dict(
+            size=7
+        ),
+
+        marker=dict(
+
+            size=19,
+
+            color=node_colors,
+
+            line=dict(
+                color="white",
+                width=1.2
+            )
+
+        ),
+
+        customdata=node_customdata,
+
+        hovertext=node_hover,
+
+        hovertemplate=(
+            "%{hovertext}<extra></extra>"
+        ),
+
+        name="Teaching Sessions"
+
+    )
+)
+
+
+fig.update_layout(
+
+    title={
+        "text": "Interactive Conflict Graph",
+        "x": 0.5
+    },
+
+    height=800,
+
+    showlegend=True,
+
+    hovermode="closest",
+
+    clickmode="event+select",
+
+    margin=dict(
+        l=20,
+        r=20,
+        t=60,
+        b=20
+    ),
+
+    xaxis=dict(
+        visible=False,
+        showgrid=False,
+        zeroline=False
+    ),
+
+    yaxis=dict(
+        visible=False,
+        showgrid=False,
+        zeroline=False,
+        scaleanchor="x",
+        scaleratio=1
+    )
+
+)
+
+
+st.markdown(
+    """
+    **Graph interaction**
+
+    - 🔵 Blue nodes: Theory sessions
+    - 🟠 Orange nodes: Laboratory sessions
+    - Grey edges: Fixed section conflicts
+    - Hover: Preview session/conflict information
+    - Click a node or edge: Inspect its details below
+    """
+)
+
+
+graph_selection = st.plotly_chart(
+
+    fig,
+
+    use_container_width=True,
+
+    key="interactive_conflict_graph",
+
+    on_select="rerun",
+
+    selection_mode="points"
+
+)
+
+
+# ------------------------------------------------------------
+# 12. NODE / EDGE DETAILS
+# ------------------------------------------------------------
+
+st.subheader("Selected Node / Edge Information")
+
+selected_points = []
+
+try:
+
+    selected_points = (
+        graph_selection.selection.points
+    )
+
+except Exception:
+
+    selected_points = []
+
+
+if selected_points:
+
+    selected_point = selected_points[-1]
+
+    curve_number = selected_point.get(
+        "curve_number"
+    )
+
+    customdata = selected_point.get(
+        "customdata"
+    )
+
+    # EDGE SELECTED
+    if curve_number == 1:
+
+        try:
+
+            edge_index = int(customdata)
+
+            edge = STATIC_GRAPH_EDGES[
+                edge_index
+            ]
+
+            source = edge["Source"]
+            target = edge["Target"]
+
+            source_data = GRAPH_VERTICES[source]
+            target_data = GRAPH_VERTICES[target]
+
+            st.info(
+                f"**Conflict Type:** {edge['Conflict_Type']}  \n"
+                f"**Description:** {edge['Description']}  \n"
+                f"**Section:** {edge['Section_ID']}"
+            )
+
+            col_a, col_b = st.columns(2)
+
+            with col_a:
+
+                st.markdown("### Session A")
+
+                st.write(source)
+
+                st.write(
+                    source_data["Course_Title"]
+                )
+
+                st.write(
+                    source_data["Session_Type"]
+                )
+
+            with col_b:
+
+                st.markdown("### Session B")
+
+                st.write(target)
+
+                st.write(
+                    target_data["Course_Title"]
+                )
+
+                st.write(
+                    target_data["Session_Type"]
+                )
+
+        except Exception as e:
+
+            st.warning(
+                f"Could not display edge details: {e}"
+            )
+
+
+    # NODE SELECTED
+    elif curve_number == 2:
+
+        session_id = str(customdata)
+
+        if session_id in GRAPH_VERTICES:
+
+            data = GRAPH_VERTICES[
+                session_id
+            ]
+
+            st.markdown(
+                f"## {data['Course_Title']}"
+            )
+
+            col_a, col_b, col_c = st.columns(3)
+
+            col_a.metric(
+                "Session ID",
+                session_id
+            )
+
+            col_b.metric(
+                "Session Type",
+                data["Session_Type"]
+            )
+
+            col_c.metric(
+                "Fixed Conflict Degree",
+                degrees[session_id]
+            )
+
+            st.write(
+                "**Course Code:**",
+                data["Course_Code"]
+            )
+
+            st.write(
+                "**Programme:**",
+                data["Programme"]
+            )
+
+            st.write(
+                "**Semester:**",
+                data["Semester"]
+            )
+
+            st.write(
+                "**Section:**",
+                data["Section"]
+            )
+
+            st.write(
+                "**Periods Required:**",
+                data["Periods_Required"]
+            )
+
+            st.write(
+                "**Consecutive:**",
+                data["Consecutive"]
+            )
+
+            st.markdown(
+                "### Eligible Faculty Candidates"
+            )
+
+            faculty = graph_clean_list(
+                data["Eligible_Faculty"]
+            )
+
+            if faculty:
+
+                st.write(
+                    sorted(faculty)
+                )
+
+            else:
+
+                st.write(
+                    "No eligible faculty candidates."
+                )
+
+
+            st.markdown(
+                "### Candidate Resources"
+            )
+
+            resources = graph_candidate_resources(
+                data
+            )
+
+            if resources:
+
+                st.write(
+                    sorted(resources)
+                )
+
+            else:
+
+                st.write(
+                    "No candidate resources."
+                )
+
+
+            st.markdown(
+                "### Fixed Conflict Neighbours"
+            )
+
+            neighbours = sorted(
+                ADJACENCY_LIST[session_id]
+            )
+
+            st.write(
+                f"{len(neighbours)} fixed conflicts"
+            )
+
+            if neighbours:
+
+                neighbour_df = pd.DataFrame([
+
+                    {
+
+                        "Session_ID": neighbour,
+
+                        "Course_Title": (
+                            GRAPH_VERTICES[neighbour]
+                            ["Course_Title"]
+                        ),
+
+                        "Session_Type": (
+                            GRAPH_VERTICES[neighbour]
+                            ["Session_Type"]
+                        )
+
                     }
 
-                except TypeError:
+                    for neighbour in neighbours
 
-                    return set()
-
-
-            def get_candidate_resources(session):
-
-                if session["Session_Type"] == "Theory":
-
-                    classroom = session["Fixed_Classroom"]
-
-                    if pd.isna(classroom):
-                        return set()
-
-                    return {str(classroom).strip()}
-
-                return clean_list(
-                    session["Candidate_Labs"]
-                )
-
-
-            # -------------------------------------------------
-            # 3. CONFLICT EDGE GENERATION
-            # -------------------------------------------------
-
-            GRAPH_EDGES = []
-
-            session_records = (
-                SCHEDULING_SESSIONS.to_dict("records")
-            )
-
-            for i in range(len(session_records)):
-
-                session_a = session_records[i]
-
-                id_a = str(session_a["Session_ID"])
-
-                faculty_a = clean_list(
-                    session_a["Eligible_Faculty"]
-                )
-
-                resources_a = get_candidate_resources(
-                    session_a
-                )
-
-                section_a = str(
-                    session_a["Section_ID"]
-                )
-
-                for j in range(i + 1, len(session_records)):
-
-                    session_b = session_records[j]
-
-                    id_b = str(
-                        session_b["Session_ID"]
-                    )
-
-                    faculty_b = clean_list(
-                        session_b["Eligible_Faculty"]
-                    )
-
-                    resources_b = get_candidate_resources(
-                        session_b
-                    )
-
-                    section_b = str(
-                        session_b["Section_ID"]
-                    )
-
-                    conflict_reasons = []
-
-                    # SAME STUDENT SECTION
-                    if section_a == section_b:
-
-                        conflict_reasons.append(
-                            "Same Section"
-                        )
-
-                    # COMMON FACULTY CANDIDATES
-                    common_faculty = (
-                        faculty_a.intersection(
-                            faculty_b
-                        )
-                    )
-
-                    if common_faculty:
-
-                        conflict_reasons.append(
-                            "Common Faculty"
-                        )
-
-                    # COMMON RESOURCE CANDIDATES
-                    common_resources = (
-                        resources_a.intersection(
-                            resources_b
-                        )
-                    )
-
-                    if common_resources:
-
-                        conflict_reasons.append(
-                            "Common Resource"
-                        )
-
-                    # CREATE EDGE IF A POTENTIAL CONFLICT EXISTS
-                    if conflict_reasons:
-
-                        GRAPH_EDGES.append({
-
-                            "Source": id_a,
-
-                            "Target": id_b,
-
-                            "Conflict_Reasons": (
-                                ", ".join(
-                                    conflict_reasons
-                                )
-                            ),
-
-                            "Common_Faculty": (
-                                ", ".join(
-                                    sorted(common_faculty)
-                                )
-                            ),
-
-                            "Common_Resources": (
-                                ", ".join(
-                                    sorted(common_resources)
-                                )
-                            )
-
-                        })
-
-            # -------------------------------------------------
-            # 4. GRAPH DATAFRAME
-            # -------------------------------------------------
-
-            GRAPH_EDGE_DF = pd.DataFrame(
-                GRAPH_EDGES
-            )
-
-            GRAPH_NODE_DF = pd.DataFrame(
-                list(GRAPH_NODES.values())
-            )
-
-            # -------------------------------------------------
-            # 5. ADJACENCY REPRESENTATION
-            # -------------------------------------------------
-
-            GRAPH_ADJACENCY = {
-                node: set()
-                for node in GRAPH_NODES
-            }
-
-            for edge in GRAPH_EDGES:
-
-                source = edge["Source"]
-
-                target = edge["Target"]
-
-                GRAPH_ADJACENCY[source].add(
-                    target
-                )
-
-                GRAPH_ADJACENCY[target].add(
-                    source
-                )
-
-            # -------------------------------------------------
-            # 6. GRAPH STATISTICS
-            # -------------------------------------------------
-
-            total_nodes = len(
-                GRAPH_NODES
-            )
-
-            total_edges = len(
-                GRAPH_EDGES
-            )
-
-            degrees = {
-                node: len(neighbors)
-                for node, neighbors
-                in GRAPH_ADJACENCY.items()
-            }
-
-            max_degree = (
-                max(degrees.values())
-                if degrees
-                else 0
-            )
-
-            average_degree = (
-                sum(degrees.values())
-                / total_nodes
-                if total_nodes
-                else 0
-            )
-
-            col1, col2, col3, col4 = st.columns(4)
-
-            col1.metric(
-                "Graph Nodes",
-                total_nodes
-            )
-
-            col2.metric(
-                "Conflict Edges",
-                total_edges
-            )
-
-            col3.metric(
-                "Maximum Degree",
-                max_degree
-            )
-
-            col4.metric(
-                "Average Degree",
-                round(average_degree, 2)
-            )
-
-            # -------------------------------------------------
-            # 7. SAVE GRAPH DATA
-            # -------------------------------------------------
-
-            st.session_state.conflict_graph_nodes = (
-                GRAPH_NODES
-            )
-
-            st.session_state.conflict_graph_edges = (
-                GRAPH_EDGE_DF
-            )
-
-            st.session_state.conflict_graph_adjacency = (
-                GRAPH_ADJACENCY
-            )
-
-            st.session_state.conflict_graph_node_df = (
-                GRAPH_NODE_DF
-            )
-
-            # -------------------------------------------------
-            # 8. VISUALIZE GRAPH
-            # -------------------------------------------------
-
-            st.subheader("Conflict Graph Visualization")
-
-            if total_nodes == 0:
-
-                st.warning(
-                    "No scheduling variables available."
-                )
-
-            elif total_edges == 0:
-
-                st.info(
-                    "No potential conflicts detected."
-                )
-
-            else:
-
-                dot_lines = [
-                    "graph ConflictGraph {",
-                    "layout=neato;",
-                    "overlap=false;",
-                    "splines=true;",
-                    "node [shape=circle, style=filled, "
-                    "fillcolor=lightblue, fontsize=9];"
-                ]
-
-                for node in GRAPH_NODES:
-
-                    dot_lines.append(
-                        f'"{node}" [label="{node}"];'
-                    )
-
-                for edge in GRAPH_EDGES:
-
-                    dot_lines.append(
-                        f'"{edge["Source"]}" -- '
-                        f'"{edge["Target"]}";'
-                    )
-
-                dot_lines.append("}")
-
-                graph_dot = "\n".join(
-                    dot_lines
-                )
-
-                st.graphviz_chart(
-                    graph_dot,
-                    use_container_width=True
-                )
-
-            # -------------------------------------------------
-            # 9. NODE MAPPING
-            # -------------------------------------------------
-
-            st.subheader("Node Mapping")
-
-            st.dataframe(
-                GRAPH_NODE_DF[
-                    [
-                        "Session_ID",
-                        "Section_ID",
-                        "Course_Code",
-                        "Course_Title",
-                        "Session_Type"
-                    ]
-                ],
-                use_container_width=True,
-                hide_index=True
-            )
-
-            # -------------------------------------------------
-            # 10. EDGE MAPPING
-            # -------------------------------------------------
-
-            st.subheader("Edge Mapping")
-
-            if GRAPH_EDGE_DF.empty:
-
-                st.info(
-                    "No conflict edges were generated."
-                )
-
-            else:
+                ])
 
                 st.dataframe(
-                    GRAPH_EDGE_DF,
+                    neighbour_df,
                     use_container_width=True,
                     hide_index=True
                 )
 
-            # -------------------------------------------------
-            # 11. DEGREE ANALYSIS
-            # -------------------------------------------------
 
-            DEGREE_DF = pd.DataFrame({
+            st.markdown(
+                "### Conditional Relationships"
+            )
 
-                "Session_ID": list(
-                    degrees.keys()
-                ),
+            conditional_for_node = [
 
-                "Degree": list(
-                    degrees.values()
+                item
+
+                for item in CONDITIONAL_CONFLICTS
+
+                if session_id in [
+                    item["Session_A"],
+                    item["Session_B"]
+                ]
+
+            ]
+
+            if conditional_for_node:
+
+                conditional_df = pd.DataFrame(
+                    conditional_for_node
                 )
 
-            }).sort_values(
-                "Degree",
-                ascending=False
-            )
+                st.dataframe(
+                    conditional_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
 
-            st.subheader(
-                "Node Degree Analysis"
-            )
+            else:
 
-            st.dataframe(
-                DEGREE_DF,
-                use_container_width=True,
-                hide_index=True
-            )
+                st.write(
+                    "No conditional faculty/resource relationships."
+                )
 
-            # -------------------------------------------------
-            # 12. DOWNLOAD GRAPH DATA
-            # -------------------------------------------------
+else:
 
-            st.download_button(
-                "Download Conflict Edge List",
-                data=GRAPH_EDGE_DF.to_csv(
-                    index=False
-                ).encode("utf-8"),
-                file_name="CONFLICT_GRAPH_EDGES.csv",
-                mime="text/csv"
-            )
+    st.info(
+        "Click a graph node or an edge to inspect its details."
+    )
 
-            st.download_button(
-                "Download Graph Node Mapping",
-                data=GRAPH_NODE_DF.to_csv(
-                    index=False
-                ).encode("utf-8"),
-                file_name="CONFLICT_GRAPH_NODES.csv",
-                mime="text/csv"
-            )
+
+# ------------------------------------------------------------
+# 13. NODE DEGREE TABLE
+# ------------------------------------------------------------
+
+st.subheader("Degree Analysis")
+
+DEGREE_DF = pd.DataFrame({
+
+    "Session_ID": list(degrees.keys()),
+
+    "Degree": list(degrees.values())
+
+}).sort_values(
+    "Degree",
+    ascending=False
+)
+
+st.dataframe(
+    DEGREE_DF,
+    use_container_width=True,
+    hide_index=True
+)
+
+
+# ------------------------------------------------------------
+# 14. CONDITIONAL CONFLICT TABLE
+# ------------------------------------------------------------
+
+st.subheader(
+    "Conditional Faculty / Resource Relationships"
+)
+
+if CONDITIONAL_CONFLICTS:
+
+    CONDITIONAL_DF = pd.DataFrame(
+        CONDITIONAL_CONFLICTS
+    )
+
+    st.dataframe(
+        CONDITIONAL_DF,
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "No conditional relationships were detected."
+    )
+
+
+# ------------------------------------------------------------
+# 15. DOWNLOAD GRAPH DATA
+# ------------------------------------------------------------
+
+STATIC_EDGE_DF = pd.DataFrame(
+    STATIC_GRAPH_EDGES
+)
+
+NODE_MAPPING_DF = pd.DataFrame(
+    list(GRAPH_VERTICES.values())
+)
+
+st.download_button(
+
+    "Download Fixed Conflict Edges",
+
+    data=STATIC_EDGE_DF.to_csv(
+        index=False
+    ).encode("utf-8"),
+
+    file_name="STATIC_CONFLICT_EDGES.csv",
+
+    mime="text/csv"
+
+)
+
+
+st.download_button(
+
+    "Download Node Mapping",
+
+    data=NODE_MAPPING_DF.to_csv(
+        index=False
+    ).encode("utf-8"),
+
+    file_name="GRAPH_NODE_MAPPING.csv",
+
+    mime="text/csv"
+
+)
 
             st.session_state.scheduling_domains_confirmed = False
 
