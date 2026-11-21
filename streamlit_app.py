@@ -6417,10 +6417,10 @@ elif page == "8. Generate Timetable":
 
 else:
 
-st.info(
-    "Generate the timetable using CP-SAT first. "
-    "The timetable viewer will remain available after generation."
-)
+    st.info(
+        "Generate the timetable using CP-SAT first. "
+        "The timetable viewer will remain available after generation."
+    )
 
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
