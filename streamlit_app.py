@@ -4670,7 +4670,7 @@ elif page == "8. Generate Timetable":
 
             periods_by_day = {}
 
-            for _, period in VALID_PERIODS.iterrows():
+            for period in VALID_PERIODS:
 
                 day = str(period["Day"])
 
