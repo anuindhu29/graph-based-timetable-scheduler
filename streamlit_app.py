@@ -6400,11 +6400,11 @@ elif page == "8. Generate Timetable":
         # DETAILS
         with st.expander("View Timetable Data"):
 
-            st.dataframe(
-                view_df,
-                use_container_width=True,
-                hide_index=True
-            )
+        st.dataframe(
+            view_df,
+            use_container_width=True,
+            hide_index=True
+        )
 
         # DOWNLOAD
         st.download_button(
