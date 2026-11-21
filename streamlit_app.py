@@ -6574,40 +6574,6 @@ elif page == "9. CP-SAT Timetable Solver":
                     st.success(
                         "Timetable generated successfully!"
                     )
-
-                    col1, col2, col3, col4 = st.columns(4)
-
-                    col1.metric(
-                        "Solver Status",
-                        solver.StatusName(status)
-                    )
-
-                    col2.metric(
-                        "Sessions Scheduled",
-                        len(TIMETABLE_DF)
-                    )
-
-                    col3.metric(
-                        "Solver Runtime",
-                        f"{solver.WallTime():.2f} seconds"
-                    )
-
-                    col4.metric(
-                        "Total Constraints",
-                        (
-                            section_constraints
-                            + faculty_constraints
-                            + resource_constraints
-                        )
-                    )
-
-                    # ---------------------------------------------
-                    # CONSTRAINT SUMMARY
-                    # ---------------------------------------------
-
-                    # -------------------------------------------------
-                    # 11. SOLVER STATUS
-                    # -------------------------------------------------
                     
                     st.subheader("Solver Result")
                     
