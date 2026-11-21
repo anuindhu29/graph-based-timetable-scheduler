@@ -6143,16 +6143,15 @@ elif page == "9. CP-SAT Timetable Solver":
         f"Solver Status: {st.session_state.get('cpsat_status', 'Unknown')}"
     )
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(3)
 
-    col1.metric("Sessions Scheduled", len(TIMETABLE_DF))
 
-    col2.metric(
+    col1.metric(
         "Solver Runtime",
         f"{st.session_state.get('cpsat_runtime', 0):.2f} seconds"
     )
 
-    col3.metric(
+    col2.metric(
         "Conflict Graph Edges",
         len(st.session_state.STATIC_GRAPH_EDGES)
     )
