@@ -4630,7 +4630,7 @@ elif page == "8. Generate Timetable":
                     st.divider()
 
                     if st.button(
-                        "Confirm Scheduling Dataset",
+                        "Confirm Domains & Continue to Conflict Graph",
                         type="primary",
                         use_container_width=True
                     ):
@@ -6107,36 +6107,6 @@ elif page == "8. Generate Timetable":
 
             st.session_state.scheduling_domains_confirmed = False
 
-            # -----------------------------------------
-            # CONFIRM DOMAINS & CONTINUE
-            # -----------------------------------------
-
-            st.divider()
-
-            if EMPTY_DOMAIN_SESSIONS.empty:
-
-                if st.button(
-                    "Confirm Domains & Continue to Conflict Graph",
-                    type="primary",
-                    use_container_width=True
-                ):
-
-                    st.session_state.scheduling_domains_confirmed = True
-
-                    st.session_state.workflow_stage = 2
-
-                    st.success(
-                        "Scheduling domains confirmed successfully."
-                    )
-
-                    st.rerun()
-
-            else:
-
-                st.warning(
-                    "Resolve empty domains before proceeding "
-                    "to the Conflict Graph."
-                )
 # =========================================================
 # FOOTER
 # =========================================================
