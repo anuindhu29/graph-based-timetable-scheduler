@@ -1638,23 +1638,32 @@ elif page == "8. Generate Timetable":
        # =============================================
         # WORKFLOW PROGRESS
         # =============================================
-
         st.markdown("### Workflow Progress")
 
         workflow_stages = [
             "Session Generation",
-            "Domains",
+            "Scheduling Domains",
             "Conflict Graph",
             "Graph Analysis",
             "CSP Solver",
-            "Timetable",
+            "Timetable Generation",
             "Validation & Export"
         ]
 
-        st.progress(0.15)
+        current_stage = st.session_state.get(
+            "workflow_stage", 0
+        )
+
+        progress_value = (
+            current_stage + 1
+        ) / len(workflow_stages)
+
+        st.progress(progress_value)
 
         st.caption(
-            "Stage 1 of 7 — Session Generation"
+            f"Stage {current_stage + 1} of "
+            f"{len(workflow_stages)}: "
+            f"{workflow_stages[current_stage]}"
         )
 
         st.divider()
