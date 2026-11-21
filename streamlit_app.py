@@ -6138,58 +6138,6 @@ elif page == "9. CP-SAT Timetable Solver":
     # 1. CHECK INPUT DATA
     # -----------------------------------------------------
 
-    st.success(
-        f"Timetable generated successfully — "
-        f"Solver Status: {st.session_state.get('cpsat_status', 'Unknown')}"
-    )
-
-    col1, col2 = st.columns(2)
-
-
-    col1.metric(
-        "Solver Runtime",
-        f"{st.session_state.get('cpsat_runtime', 0):.2f} seconds"
-    )
-
-    col2.metric(
-        "Conflict Graph Edges",
-        len(st.session_state.STATIC_GRAPH_EDGES)
-    )
-
-    # Constraint statistics
-    st.subheader("CP-SAT Constraint Statistics")
-
-    constraints = st.session_state.get(
-        "cpsat_constraints", {}
-    )
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    section_count = constraints.get(
-        "Section Conflict Constraints", 0
-    )
-
-    faculty_count = constraints.get(
-        "Faculty Conflict Constraints", 0
-    )
-
-    resource_count = constraints.get(
-        "Resource Conflict Constraints", 0
-    )
-
-    col1.metric("Section Constraints", f"{section_count:,}")
-    col2.metric("Faculty Constraints", f"{faculty_count:,}")
-    col3.metric("Resource Constraints", f"{resource_count:,}")
-    col4.metric(
-        "Total Constraints",
-        f"{section_count + faculty_count + resource_count:,}"
-    )
-
-    st.caption(
-        "Assignment-level constraints are different from "
-        "the number of edges in the conflict graph."
-    )
-
     required_state = [
         "scheduling_sessions",
         "scheduling_domains",
@@ -6627,6 +6575,57 @@ elif page == "9. CP-SAT Timetable Solver":
                     if "generated_timetable" in st.session_state:
             
                         TIMETABLE_DF = st.session_state.generated_timetable.copy()
+                            st.success(
+                            f"Timetable generated successfully — "
+                            f"Solver Status: {st.session_state.get('cpsat_status', 'Unknown')}"
+                        )
+                    
+                        col1, col2 = st.columns(2)
+                    
+                    
+                        col1.metric(
+                            "Solver Runtime",
+                            f"{st.session_state.get('cpsat_runtime', 0):.2f} seconds"
+                        )
+                    
+                        col2.metric(
+                            "Conflict Graph Edges",
+                            len(st.session_state.STATIC_GRAPH_EDGES)
+                        )
+                    
+                        # Constraint statistics
+                        st.subheader("CP-SAT Constraint Statistics")
+                    
+                        constraints = st.session_state.get(
+                            "cpsat_constraints", {}
+                        )
+                    
+                        col1, col2, col3, col4 = st.columns(4)
+                    
+                        section_count = constraints.get(
+                            "Section Conflict Constraints", 0
+                        )
+                    
+                        faculty_count = constraints.get(
+                            "Faculty Conflict Constraints", 0
+                        )
+                    
+                        resource_count = constraints.get(
+                            "Resource Conflict Constraints", 0
+                        )
+                    
+                        col1.metric("Section Constraints", f"{section_count:,}")
+                        col2.metric("Faculty Constraints", f"{faculty_count:,}")
+                        col3.metric("Resource Constraints", f"{resource_count:,}")
+                        col4.metric(
+                            "Total Constraints",
+                            f"{section_count + faculty_count + resource_count:,}"
+                        )
+                    
+                        st.caption(
+                            "Assignment-level constraints are different from "
+                            "the number of edges in the conflict graph."
+                        )
             
                         if not TIMETABLE_DF.empty:
             
