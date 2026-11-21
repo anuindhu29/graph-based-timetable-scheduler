@@ -31,7 +31,16 @@ defaults = {
     "config": {},
     "config_confirmed": False,
     "uploaded_data": {},
-    "files_confirmed": False
+    "files_confirmed": False,
+
+    # Confirmation states
+    "room_lab_confirmed": False,
+    "classroom_allocation_confirmed": False,
+    "lab_configuration_confirmed": False,
+    "course_requirements_confirmed": False,
+    "scheduling_dataset_confirmed": False,
+    "scheduling_domains_confirmed": False,
+    "conflict_graph_confirmed": False
 }
 
 for key, value in defaults.items():
@@ -2194,14 +2203,16 @@ elif page == "8. Generate Timetable":
                 "Configuration first."
             )
 
-        elif not st.session_state.get(
-            "classroom_allocation_confirmed", False
+        elif not (
+            st.session_state.get("classroom_allocation_confirmed", False)
+            or st.session_state.config.get(
+                "classroom_allocation_confirmed", False
+            )
         ):
-
+        
             st.error(
                 "Please confirm Fixed Classroom Allocation first."
             )
-
         elif not st.session_state.get(
             "course_requirements_confirmed", False
         ):
@@ -2819,6 +2830,11 @@ elif page == "8. Generate Timetable":
                             )
 
                             st.session_state.classroom_allocation_confirmed = True
+
+                            # Store confirmation in configuration as well
+                            st.session_state.config[
+                                "classroom_allocation_confirmed"
+                            ] = True
 
                             st.session_state.config[
                                 "section_classroom_mapping"
