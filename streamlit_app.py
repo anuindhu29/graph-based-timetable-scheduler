@@ -1681,6 +1681,42 @@ elif page == "8. Generate Timetable":
             ]
         )
 
+        # =============================================
+        # WORKFLOW NAVIGATION
+        # =============================================
+
+        st.divider()
+
+        nav_col1, nav_col2, nav_col3 = st.columns(
+            [1, 2, 1]
+        )
+
+        with nav_col1:
+
+            if st.button(
+                "⬅️ Previous",
+                disabled=True,
+                use_container_width=True
+            ):
+                pass
+
+        with nav_col2:
+
+            st.markdown(
+                "<div style='text-align:center'>"
+                "<b>Stage 1: Session Generation</b>"
+                "</div>",
+                unsafe_allow_html=True
+            )
+
+        with nav_col3:
+
+            st.button(
+                "Next ➡️",
+                disabled=True,
+                use_container_width=True
+            )
+
         st.divider()
 
         st.subheader("Dataset Summary")
