@@ -1,4 +1,4 @@
-import streamlit as st
+qdimport streamlit as st
 import pandas as pd
 import json
 from datetime import datetime
@@ -4007,11 +4007,35 @@ elif page == "8. Generate Timetable":
                 # ---------------------------------------------
                 # 4. GENERATE INDIVIDUAL SESSIONS
                 # ---------------------------------------------
-
+                # ---------------------------------------------
+                # NORMALIZE PROGRAMME NAMES FOR MATCHING
+                # ---------------------------------------------
+                
+                def normalize_programme_name(value):
+                
+                    value = str(value).strip().lower()
+                
+                    if "b.tech" in value or "btech" in value:
+                        return "btech"
+                
+                    if "m.tech" in value or "mtech" in value:
+                        return "mtech"
+                
+                    return value
+                
+                
+                def normalize_semester(value):
+                
+                    try:
+                        return int(float(str(value).strip()))
+                    except (ValueError, TypeError):
+                        return str(value).strip().upper()
+                
+                
                 session_records = []
-
+                
                 session_counter = 1
-
+                
                 for _, section in SECTION_LIST.iterrows():
 
                     section_id = str(
@@ -4024,23 +4048,36 @@ elif page == "8. Generate Timetable":
 
                     section_name = section["Section"]
 
-                    section_courses = (
-                        CURRICULUM_FOR_SCHEDULING[
-                            (
-                                CURRICULUM_FOR_SCHEDULING[
-                                    programme_col
-                                ].astype(str)
-                                == str(programme)
-                            )
-                            &
-                            (
-                                CURRICULUM_FOR_SCHEDULING[
-                                    semester_col
-                                ].astype(str)
-                                == str(semester)
-                            )
-                        ]
+                    section_programme_normalized = normalize_programme_name(
+                        section["Programme"]
                     )
+                    
+                    section_semester_normalized = normalize_semester(
+                        section["Semester"]
+                    )
+                    
+                    curriculum_programme_normalized = (
+                        CURRICULUM_FOR_SCHEDULING[programme_col]
+                        .apply(normalize_programme_name)
+                    )
+                    
+                    curriculum_semester_normalized = (
+                        CURRICULUM_FOR_SCHEDULING[semester_col]
+                        .apply(normalize_semester
+                        )
+                    )
+                    
+                    section_courses = CURRICULUM_FOR_SCHEDULING[
+                        (
+                            curriculum_programme_normalized
+                            == section_programme_normalized
+                        )
+                        &
+                        (
+                            curriculum_semester_normalized
+                            == section_semester_normalized
+                        )
+                    ].copy()
 
                     # -----------------------------------------
                     # FIXED CLASSROOM FOR SECTION
