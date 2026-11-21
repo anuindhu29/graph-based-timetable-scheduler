@@ -64,7 +64,6 @@ page = st.sidebar.radio(
         "9. CP-SAT Timetable Solver",
         "10. View Generated Timetable"
     ]
-    key="main_navigation"
 )
 
 # =========================================================
