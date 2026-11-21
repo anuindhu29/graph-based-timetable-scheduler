@@ -6425,7 +6425,7 @@ else:
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
 # =========================================================
-]elif page == "10. View Generated Timetable":
+elif page == "10. View Generated Timetable":
 
     st.header("📅 View Generated Timetable")
 
