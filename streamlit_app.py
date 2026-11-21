@@ -6212,7 +6212,7 @@ elif page == "8. Generate Timetable":
             st.subheader(
                 "Conditional Faculty / Resource Relationships"
             )
-
+            
             if CONDITIONAL_CONFLICTS:
             
                 CONDITIONAL_DF = pd.DataFrame(
@@ -6231,32 +6231,34 @@ elif page == "8. Generate Timetable":
                     "No conditional relationships were detected."
                 )
             
-                # ------------------------------------------------------------
-                # 15. DOWNLOAD GRAPH DATA
-                # ------------------------------------------------------------
-                
-                STATIC_EDGE_DF = pd.DataFrame(STATIC_GRAPH_EDGES)
-                
-                NODE_MAPPING_DF = pd.DataFrame(
-                    list(GRAPH_VERTICES.values())
-                )
-                
-                st.download_button(
-                    "Download Fixed Conflict Edges",
-                    data=STATIC_EDGE_DF.to_csv(index=False).encode("utf-8"),
-                    file_name="STATIC_CONFLICT_EDGES.csv",
-                    mime="text/csv"
-                )
-                
-                st.download_button(
-                    "Download Node Mapping",
-                    data=NODE_MAPPING_DF.to_csv(index=False).encode("utf-8"),
-                    file_name="GRAPH_NODE_MAPPING.csv",
-                    mime="text/csv"
-                )
-                
-                st.divider()
-                
+            
+            # ------------------------------------------------------------
+            # 15. DOWNLOAD GRAPH DATA
+            # ------------------------------------------------------------
+            
+            STATIC_EDGE_DF = pd.DataFrame(STATIC_GRAPH_EDGES)
+            
+            NODE_MAPPING_DF = pd.DataFrame(
+                list(GRAPH_VERTICES.values())
+            )
+            
+            st.download_button(
+                "Download Fixed Conflict Edges",
+                data=STATIC_EDGE_DF.to_csv(index=False).encode("utf-8"),
+                file_name="STATIC_CONFLICT_EDGES.csv",
+                mime="text/csv"
+            )
+            
+            st.download_button(
+                "Download Node Mapping",
+                data=NODE_MAPPING_DF.to_csv(index=False).encode("utf-8"),
+                file_name="GRAPH_NODE_MAPPING.csv",
+                mime="text/csv"
+            )
+            
+            st.divider()
+            
+            
             # ------------------------------------------------------------
             # 16. CONFIRM CONFLICT GRAPH
             # ------------------------------------------------------------
@@ -6292,6 +6294,25 @@ elif page == "8. Generate Timetable":
                     st.success(
                         "Conflict graph confirmed. CP-SAT is ready."
                     )
+
+
+# ------------------------------------------------------------
+# 17. CP-SAT READY STATUS
+# ------------------------------------------------------------
+
+if st.session_state.get(
+    "conflict_graph_confirmed", False
+):
+
+    st.success(
+        "Conflict graph is confirmed. You can now proceed to CP-SAT."
+    )
+
+else:
+
+    st.info(
+        "Confirm the conflict graph before proceeding to CP-SAT."
+    )
             
             # ------------------------------------------------------------
             # 17. CP-SAT READY STATUS
