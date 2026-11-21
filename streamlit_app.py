@@ -5595,7 +5595,9 @@ elif page == "8. Generate Timetable":
                     f"Section: {data['Section']}<br>"
                     f"Type: {data['Session_Type']}<br>"
                     f"Periods: {data['Periods_Required']}<br>"
-                    f"Fixed Conflict Degree: {degrees[node]}<br>"
+                    f"<b>Fixed Conflict Degree: {degrees[node]}</b><br>"
+                    f"<b>Conflicts With:</b><br>"
+                    f"{'<br>'.join(sorted(ADJACENCY_LIST[node])[:12])}<br>"
                     f"Faculty Candidates: "
                     f"{len(graph_clean_list(data['Eligible_Faculty']))}<br>"
                     f"<b>Click to inspect session</b>"
@@ -5620,10 +5622,10 @@ elif page == "8. Generate Timetable":
                     mode="lines",
             
                     line=dict(
-                        color="rgba(100,100,100,0.55)",
-                        width=1.2
+                        color="rgba(170,170,170,0.50)",
+                        width=1.1
                     ),
-            
+                    
                     hoverinfo="skip",
             
                     name="Fixed Section Conflicts"
