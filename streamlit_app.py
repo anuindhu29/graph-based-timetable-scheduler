@@ -1603,7 +1603,7 @@ elif page == "8. Generate Timetable":
     else:
 
         st.success(
-            "✅ Configuration and uploaded datasets are ready."
+            "Configuration and uploaded datasets are ready."
         )
 
         # =============================================
@@ -1624,7 +1624,7 @@ elif page == "8. Generate Timetable":
             )
 
             if st.button(
-                "🚀 Start New Scheduling Process",
+                "Start New Scheduling Process",
                 type="primary",
                 use_container_width=True
             ):
@@ -1634,6 +1634,30 @@ elif page == "8. Generate Timetable":
                 st.rerun()
 
             st.stop()
+
+       # =============================================
+        # WORKFLOW PROGRESS
+        # =============================================
+
+        st.markdown("### Workflow Progress")
+
+        workflow_stages = [
+            "Session Generation",
+            "Domains",
+            "Conflict Graph",
+            "Graph Analysis",
+            "CSP Solver",
+            "Timetable",
+            "Validation & Export"
+        ]
+
+        st.progress(0.15)
+
+        st.caption(
+            "Stage 1 of 7 — Session Generation"
+        )
+
+        st.divider()
 
         st.subheader("Dataset Summary")
 
