@@ -63,23 +63,29 @@ if page == "1. Programme Configuration":
 
     st.header("Academic Programme Configuration")
 
+    saved_programmes = st.session_state.config.get("academic_programmes", {})
     semester_type = st.selectbox(
         "Semester Type",
-        ["Odd", "Even"]
+        ["Odd", "Even"],
+        index=["Odd", "Even"].index(saved_programmes.get("semester_type", "Odd"))
+            if saved_programmes.get("semester_type", "Odd") in ["Odd", "Even"] else 0,
+        key="programme_semester_type"
     )
 
     st.subheader("B.Tech")
 
     include_btech = st.checkbox(
         "Include B.Tech",
-        value=True
+        value=saved_programmes.get("B.Tech", {}).get("included", True),
+        key="include_btech"
     )
 
     btech_sections = st.number_input(
         "Number of B.Tech Sections",
         min_value=1,
         max_value=20,
-        value=2
+        value=int(saved_programmes.get("B.Tech", {}).get("sections", 2)),
+        key="btech_sections"
     )
 
     if semester_type == "Odd":
@@ -99,14 +105,15 @@ if page == "1. Programme Configuration":
 
     include_mtech = st.checkbox(
         "Include M.Tech",
-        value=True
+        value=saved_programmes.get("M.Tech", {}).get("included", True),
+        key="include_mtech"
     )
 
     mtech_sections = st.number_input(
         "Number of M.Tech Sections",
         min_value=1,
         max_value=20,
-        value=2,
+        value=int(saved_programmes.get("M.Tech", {}).get("sections", 2)),
         key="mtech_sections"
     )
     if semester_type == "Odd":
@@ -141,6 +148,17 @@ if page == "1. Programme Configuration":
 
             st.session_state.config["academic_programmes"] = config
             st.session_state.config_confirmed = False
+            st.session_state.config["complete_confirmed"] = False
+            st.session_state.config["academic_programmes_confirmed"] = False
+            st.session_state.files_confirmed = False
+            st.session_state.faculty_constraints_confirmed = False
+            st.session_state.room_lab_confirmed = False
+            st.session_state.classroom_allocation_confirmed = False
+            st.session_state.lab_configuration_confirmed = False
+            st.session_state.course_requirements_confirmed = False
+            st.session_state.scheduling_dataset_confirmed = False
+            st.session_state.scheduling_domains_confirmed = False
+            st.session_state.conflict_graph_confirmed = False
 
             st.success("Configuration reviewed.")
 
@@ -164,57 +182,80 @@ elif page == "2. Academic Calendar":
 
     st.info("Working days: Monday to Friday")
 
+    saved_calendar = st.session_state.config.get("calendar", {})
+    def _time_default(value, fallback):
+        try:
+            return datetime.strptime(str(value), "%H:%M:%S").time()
+        except ValueError:
+            try:
+                return datetime.strptime(str(value), "%H:%M").time()
+            except (ValueError, TypeError):
+                return datetime.strptime(fallback, "%H:%M").time()
+
     col1, col2 = st.columns(2)
 
     with col1:
 
         college_start = st.time_input(
             "College Start",
-            datetime.strptime("08:30", "%H:%M").time()
+            value=_time_default(saved_calendar.get("college_start"), "08:30"),
+            key="calendar_college_start"
         )
 
         college_end = st.time_input(
             "College End",
-            datetime.strptime("17:00", "%H:%M").time()
+            value=_time_default(saved_calendar.get("college_end"), "17:00"),
+            key="calendar_college_end"
         )
 
         period_duration = st.number_input(
             "Period Duration (minutes)",
             min_value=1,
             max_value=180,
-            value=50
+            value=int(saved_calendar.get("period_duration", 50)),
+            key="calendar_period_duration"
         )
 
     with col2:
 
+        morning_break_saved = saved_calendar.get("morning_break", {})
+        lunch_saved = saved_calendar.get("lunch", {})
+        afternoon_break_saved = saved_calendar.get("afternoon_break", {})
+
         morning_start = st.time_input(
             "Morning Break Start",
-            datetime.strptime("10:10", "%H:%M").time()
+            value=_time_default(morning_break_saved.get("start"), "10:10"),
+            key="calendar_morning_start"
         )
 
         morning_end = st.time_input(
             "Morning Break End",
-            datetime.strptime("10:30", "%H:%M").time()
+            value=_time_default(morning_break_saved.get("end"), "10:30"),
+            key="calendar_morning_end"
         )
 
         lunch_start = st.time_input(
             "Lunch Start",
-            datetime.strptime("12:10", "%H:%M").time()
+            value=_time_default(lunch_saved.get("start"), "12:10"),
+            key="calendar_lunch_start"
         )
 
         lunch_end = st.time_input(
             "Lunch End",
-            datetime.strptime("13:30", "%H:%M").time()
+            value=_time_default(lunch_saved.get("end"), "13:30"),
+            key="calendar_lunch_end"
         )
 
         afternoon_start = st.time_input(
             "Afternoon Break Start",
-            datetime.strptime("14:20", "%H:%M").time()
+            value=_time_default(afternoon_break_saved.get("start"), "14:20"),
+            key="calendar_afternoon_start"
         )
 
         afternoon_end = st.time_input(
             "Afternoon Break End",
-            datetime.strptime("14:30", "%H:%M").time()
+            value=_time_default(afternoon_break_saved.get("end"), "14:30"),
+            key="calendar_afternoon_end"
         )
 
     if st.button("Review Calendar Configuration"):
@@ -242,6 +283,17 @@ elif page == "2. Academic Calendar":
         }
 
         st.session_state.config["calendar"] = calendar
+        st.session_state.config["calendar_confirmed"] = False
+        st.session_state.config["complete_confirmed"] = False
+        st.session_state.files_confirmed = False
+        st.session_state.faculty_constraints_confirmed = False
+        st.session_state.room_lab_confirmed = False
+        st.session_state.classroom_allocation_confirmed = False
+        st.session_state.lab_configuration_confirmed = False
+        st.session_state.course_requirements_confirmed = False
+        st.session_state.scheduling_dataset_confirmed = False
+        st.session_state.scheduling_domains_confirmed = False
+        st.session_state.conflict_graph_confirmed = False
 
         st.json(calendar)
 
@@ -265,34 +317,40 @@ elif page == "3. Faculty Workload":
 
     st.write("Modify weekly workload rules if required.")
 
+    saved_workload = st.session_state.config.get("workload", {})
     ap_hours = st.number_input(
         "Assistant Professor - Weekly Hours",
-        value=16,
-        min_value=1
+        value=int(saved_workload.get("Assistant Professor", 16)),
+        min_value=1,
+        key="workload_ap_hours"
     )
 
     assoc_hours = st.number_input(
         "Associate Professor - Weekly Hours",
-        value=14,
-        min_value=1
+        value=int(saved_workload.get("Associate Professor", 14)),
+        min_value=1,
+        key="workload_assoc_hours"
     )
 
     prof_hours = st.number_input(
         "Professor - Weekly Hours",
-        value=14,
-        min_value=1
+        value=int(saved_workload.get("Professor", 14)),
+        min_value=1,
+        key="workload_prof_hours"
     )
 
     st.subheader("Faculty Rules")
 
     mtech_allowed = st.checkbox(
         "Only Professors and Associate Professors can handle M.Tech",
-        value=True
+        value=saved_workload.get("mtech_eligibility", True),
+        key="workload_mtech_allowed"
     )
 
     lab_consecutive = st.checkbox(
         "Laboratory sessions require consecutive periods",
-        value=True
+        value=saved_workload.get("lab_consecutive_periods", True),
+        key="workload_lab_consecutive"
     )
 
     if st.button("Review Workload Rules"):
@@ -306,6 +364,12 @@ elif page == "3. Faculty Workload":
         }
 
         st.session_state.config["workload"] = rules
+        st.session_state.config["workload_confirmed"] = False
+        st.session_state.config["complete_confirmed"] = False
+        st.session_state.faculty_constraints_confirmed = False
+        st.session_state.scheduling_dataset_confirmed = False
+        st.session_state.scheduling_domains_confirmed = False
+        st.session_state.conflict_graph_confirmed = False
 
         st.json(rules)
 
@@ -342,11 +406,22 @@ elif page == "4. Configuration Review":
             if item not in st.session_state.config
         ]
 
+        unconfirmed = [
+            label for label, flag in [
+                ("Programme Configuration", st.session_state.get("config_confirmed", False)),
+                ("Calendar Configuration", st.session_state.config.get("calendar_confirmed", False)),
+                ("Workload Rules", st.session_state.config.get("workload_confirmed", False)),
+            ] if not flag
+        ]
+
         if missing:
             st.error(
                 "Missing configuration: "
                 + ", ".join(missing)
             )
+
+        elif unconfirmed:
+            st.error("Confirm these steps first: " + ", ".join(unconfirmed))
 
         else:
             st.session_state.config["complete_confirmed"] = True
@@ -384,6 +459,13 @@ elif page == "5. Upload & Retrieve Files":
         academic = st.session_state.config["academic_programmes"]
 
         uploaded_files = {}
+
+        if st.session_state.uploaded_data:
+            st.info("Previously reviewed files are retained in this session.")
+            st.write({
+                key: info.get("filename", key)
+                for key, info in st.session_state.uploaded_data.items()
+            })
 
         # -----------------------------
         # B.TECH CURRICULUM
@@ -449,7 +531,9 @@ elif page == "5. Upload & Retrieve Files":
         # =================================================
         if st.button("Review Uploaded Files"):
 
-            review_data = {}
+            # Start with already-reviewed data so navigating back and
+            # reviewing only a newly uploaded file does not erase others.
+            review_data = dict(st.session_state.uploaded_data)
             errors = []
 
             for key, file in uploaded_files.items():
@@ -457,7 +541,7 @@ elif page == "5. Upload & Retrieve Files":
                 # Skip curriculum if programme is excluded
                 if file is None:
 
-                    if key in ["btech", "mtech"]:
+                    if key in ["btech", "mtech"] or key in review_data:
                         continue
 
                     errors.append(f"Missing required file: {key}")
@@ -611,6 +695,12 @@ elif page == "5. Upload & Retrieve Files":
 
                 st.session_state.uploaded_data = review_data
                 st.session_state.files_confirmed = False
+                st.session_state.faculty_constraints_confirmed = False
+                st.session_state.room_lab_confirmed = False
+                st.session_state.classroom_allocation_confirmed = False
+                st.session_state.lab_configuration_confirmed = False
+                st.session_state.scheduling_dataset_confirmed = False
+                st.session_state.scheduling_domains_confirmed = False
 
                 st.success("Files read successfully!")
 
@@ -1693,10 +1783,6 @@ elif page == "8. Generate Timetable":
 
         course_datasets = []
 
-        st.write("DEBUG uploaded_data keys:", list(uploaded_data.keys()))
-        st.write("DEBUG B.Tech included:", academic_config["B.Tech"]["included"])
-        st.write("DEBUG M.Tech included:", academic_config["M.Tech"]["included"])
-
         # ---------------------------------------------
         # LOAD B.TECH CURRICULUM
         # ---------------------------------------------
@@ -1735,339 +1821,359 @@ elif page == "8. Generate Timetable":
                     "M.Tech curriculum was not uploaded."
                 )
 
-            # ---------------------------------------------
-            # COMBINE CURRICULUM
-            # ---------------------------------------------
-    
-            st.write(
-                "DEBUG course_datasets count:",
-                len(course_datasets)
+        # ---------------------------------------------
+        # COMBINE CURRICULUM
+        # ---------------------------------------------
+
+        if course_datasets:
+
+            curriculum = pd.concat(
+                course_datasets,
+                ignore_index=True
             )
-    
-            if course_datasets:
-    
-                st.write(
-                    "DEBUG dataset shapes:",
-                    [df.shape for df in course_datasets]
+
+            curriculum.columns = (
+                curriculum.columns
+                .astype(str)
+                .str.strip()
+            )
+
+        else:
+
+            st.error(
+                "No curriculum dataset is available for processing."
+            )
+
+            st.stop()
+        # -----------------------------------------
+        # CLEAN NUMERIC FIELDS
+        # -----------------------------------------
+        numeric_columns = [
+            "Semester",
+            "L_Hours",
+            "T_Hours",
+            "P_Hours",
+            "Credits"
+        ]
+
+        for column in numeric_columns:
+
+            if column in curriculum.columns:
+
+                curriculum[column] = pd.to_numeric(
+                    curriculum[column],
+                    errors="coerce"
+                ).fillna(0)
+
+        # -----------------------------------------
+        # FILTER ACTIVE SEMESTERS
+        # -----------------------------------------
+        active_rows = []
+
+        for _, course in curriculum.iterrows():
+
+            programme = course["Programme_Type"]
+
+            semester = int(course["Semester"])
+
+            if programme == "B.Tech":
+
+                if semester in btech_active_semesters:
+                    active_rows.append(course)
+
+            elif programme == "M.Tech":
+
+                if semester in mtech_active_semesters:
+                    active_rows.append(course)
+
+        active_curriculum = pd.DataFrame(
+            active_rows
+        )
+
+        st.write(
+            "Selected semester configuration:",
+            semester_type
+        )
+
+        st.write(
+            "B.Tech semesters:",
+            btech_active_semesters
+            if academic_config["B.Tech"]["included"]
+            else "Not included"
+        )
+
+        st.write(
+            "M.Tech semesters:",
+            mtech_active_semesters
+            if academic_config["M.Tech"]["included"]
+            else "Not included"
+        )
+
+        # -----------------------------------------
+        # REQUIREMENT CALCULATION
+        # -----------------------------------------
+        scheduling_requirements = []
+
+        excluded_courses = []
+
+        for _, course in active_curriculum.iterrows():
+
+            course_id = str(
+                course["Course_ID"]
+            ).strip()
+
+            course_name = str(
+                course["Course_Name"]
+            ).strip()
+
+            programme = course["Programme_Type"]
+
+            semester = int(
+                course["Semester"]
+            )
+
+            category = str(
+                course.get("Category", "")
+            )
+
+            L = int(course["L_Hours"])
+            T = int(course["T_Hours"])
+            P = int(course["P_Hours"])
+            credits = int(course["Credits"])
+
+            course_type = str(
+                course.get(
+                    "Course_Type (Theory, Tutorial, Practical/Lab, or Elective)",
+                    ""
                 )
-    
-                curriculum = pd.concat(
-                    course_datasets,
-                    ignore_index=True
-                )
-    
-                curriculum.columns = (
-                    curriculum.columns
-                    .astype(str)
-                    .str.strip()
-                )
-    
-            else:
-    
-                st.error(
-                    "No curriculum dataset is available for processing."
-                )
-    
-                st.stop()
-            # -----------------------------------------
-            # CLEAN NUMERIC FIELDS
-            # -----------------------------------------
-            numeric_columns = [
-                "Semester",
-                "L_Hours",
-                "T_Hours",
-                "P_Hours",
-                "Credits"
+            ).strip()
+
+            combined_text = (
+                course_name + " " + course_type
+            ).lower()
+
+            # -------------------------------------
+            # EXCLUDE NON-REGULAR SCHEDULING ITEMS
+            # -------------------------------------
+            excluded_keywords = [
+                "internship",
+                "industrial training",
+                "academic attachment",
+                "project work",
+                "online courses",
+                "nptel",
+                "comprehensive viva",
+                "viva voce"
             ]
 
-            for column in numeric_columns:
-
-                if column in curriculum.columns:
-
-                    curriculum[column] = pd.to_numeric(
-                        curriculum[column],
-                        errors="coerce"
-                    ).fillna(0)
-
-            # -----------------------------------------
-            # FILTER ACTIVE SEMESTERS
-            # -----------------------------------------
-            active_rows = []
-
-            for _, course in curriculum.iterrows():
-
-                programme = course["Programme_Type"]
-
-                semester = int(course["Semester"])
-
-                if programme == "B.Tech":
-
-                    if semester in btech_active_semesters:
-                        active_rows.append(course)
-
-                elif programme == "M.Tech":
-
-                    if semester in mtech_active_semesters:
-                        active_rows.append(course)
-
-            active_curriculum = pd.DataFrame(
-                active_rows
+            is_excluded = any(
+                keyword in combined_text
+                for keyword in excluded_keywords
             )
 
-            st.write(
-                "Selected semester configuration:",
-                semester_type
-            )
+            if is_excluded:
 
-            st.write(
-                "B.Tech semesters:",
-                btech_active_semesters
-                if academic_config["B.Tech"]["included"]
-                else "Not included"
-            )
+                excluded_courses.append({
+                    "Programme": programme,
+                    "Semester": semester,
+                    "Course_ID": course_id,
+                    "Course_Name": course_name,
+                    "Reason": "Non-regular classroom scheduling"
+                })
 
-            st.write(
-                "M.Tech semesters:",
-                mtech_active_semesters
-                if academic_config["M.Tech"]["included"]
-                else "Not included"
-            )
+                continue
 
-            # -----------------------------------------
-            # REQUIREMENT CALCULATION
-            # -----------------------------------------
-            scheduling_requirements = []
+            # -------------------------------------
+            # CALCULATE WEEKLY THEORY AND LAB
+            # -------------------------------------
+            theory_sessions = 0
+            lab_sessions = 0
+            lab_periods = 0
 
-            excluded_courses = []
+            # Theory + practical
+            if L > 0 and P > 0:
 
-            for _, course in active_curriculum.iterrows():
+                theory_sessions = 3
 
-                course_id = str(
-                    course["Course_ID"]
-                ).strip()
+                lab_sessions = 1
 
-                course_name = str(
-                    course["Course_Name"]
-                ).strip()
+                lab_periods = 2
 
-                programme = course["Programme_Type"]
-
-                semester = int(
-                    course["Semester"]
+                course_classification = (
+                    "Theory + Lab"
                 )
 
-                category = str(
-                    course.get("Category", "")
-                )
+            # Practical / lab only
+            elif L == 0 and P > 0:
 
-                L = int(course["L_Hours"])
-                T = int(course["T_Hours"])
-                P = int(course["P_Hours"])
-                credits = int(course["Credits"])
-
-                course_type = str(
-                    course.get(
-                        "Course_Type (Theory, Tutorial, Practical/Lab, or Elective)",
-                        ""
-                    )
-                ).strip()
-
-                combined_text = (
-                    course_name + " " + course_type
-                ).lower()
-
-                # -------------------------------------
-                # EXCLUDE NON-REGULAR SCHEDULING ITEMS
-                # -------------------------------------
-                excluded_keywords = [
-                    "internship",
-                    "industrial training",
-                    "academic attachment",
-                    "project work",
-                    "online courses",
-                    "nptel",
-                    "comprehensive viva",
-                    "viva voce"
-                ]
-
-                is_excluded = any(
-                    keyword in combined_text
-                    for keyword in excluded_keywords
-                )
-
-                if is_excluded:
-
-                    excluded_courses.append({
-                        "Programme": programme,
-                        "Semester": semester,
-                        "Course_ID": course_id,
-                        "Course_Name": course_name,
-                        "Reason": "Non-regular classroom scheduling"
-                    })
-
-                    continue
-
-                # -------------------------------------
-                # CALCULATE WEEKLY THEORY AND LAB
-                # -------------------------------------
                 theory_sessions = 0
-                lab_sessions = 0
-                lab_periods = 0
 
-                # Theory + practical
-                if L > 0 and P > 0:
+                lab_sessions = 1
+
+                lab_periods = 2
+
+                course_classification = (
+                    "Lab Only"
+                )
+
+            # Theory only
+            elif L > 0 and P == 0:
+
+                if credits == 3:
 
                     theory_sessions = 3
 
-                    lab_sessions = 1
+                elif credits == 4:
 
-                    lab_periods = 2
-
-                    course_classification = (
-                        "Theory + Lab"
-                    )
-
-                # Practical / lab only
-                elif L == 0 and P > 0:
-
-                    theory_sessions = 0
-
-                    lab_sessions = 1
-
-                    lab_periods = 2
-
-                    course_classification = (
-                        "Lab Only"
-                    )
-
-                # Theory only
-                elif L > 0 and P == 0:
-
-                    if credits == 3:
-
-                        theory_sessions = 3
-
-                    elif credits == 4:
-
-                        theory_sessions = 4
-
-                    else:
-
-                        theory_sessions = L + T
-
-                    lab_sessions = 0
-
-                    lab_periods = 0
-
-                    course_classification = (
-                        "Theory Only"
-                    )
+                    theory_sessions = 4
 
                 else:
 
-                    excluded_courses.append({
-                        "Programme": programme,
-                        "Semester": semester,
-                        "Course_ID": course_id,
-                        "Course_Name": course_name,
-                        "Reason": "No weekly teaching hours"
-                    })
+                    theory_sessions = L + T
 
-                    continue
+                lab_sessions = 0
 
-                # -------------------------------------
-                # TOTAL WEEKLY PERIODS
-                # -------------------------------------
-                total_weekly_periods = (
-                    theory_sessions
-                    + lab_periods
+                lab_periods = 0
+
+                course_classification = (
+                    "Theory Only"
                 )
 
-                scheduling_requirements.append({
+            else:
 
+                excluded_courses.append({
                     "Programme": programme,
-
                     "Semester": semester,
-
                     "Course_ID": course_id,
-
                     "Course_Name": course_name,
-
-                    "Category": category,
-
-                    "Credits": credits,
-
-                    "L_Hours": L,
-
-                    "T_Hours": T,
-
-                    "P_Hours": P,
-
-                    "Classification": course_classification,
-
-                    "Theory_Sessions_Per_Week": theory_sessions,
-
-                    "Lab_Sessions_Per_Week": lab_sessions,
-
-                    "Lab_Consecutive_Periods": lab_periods,
-
-                    "Total_Weekly_Periods": total_weekly_periods
-
+                    "Reason": "No weekly teaching hours"
                 })
 
-            # -----------------------------------------
-            # DISPLAY REQUIREMENTS
-            # -----------------------------------------
-            requirements_df = pd.DataFrame(
-                scheduling_requirements
+                continue
+
+            # -------------------------------------
+            # TOTAL WEEKLY PERIODS
+            # -------------------------------------
+            total_weekly_periods = (
+                theory_sessions
+                + lab_periods
             )
 
-            st.divider()
+            scheduling_requirements.append({
 
-            st.subheader(
-                "Calculated Weekly Course Requirements"
+                "Programme": programme,
+
+                "Semester": semester,
+
+                "Course_ID": course_id,
+
+                "Course_Name": course_name,
+
+                "Category": category,
+
+                "Credits": credits,
+
+                "L_Hours": L,
+
+                "T_Hours": T,
+
+                "P_Hours": P,
+
+                "Classification": course_classification,
+
+                "Theory_Sessions_Per_Week": theory_sessions,
+
+                "Lab_Sessions_Per_Week": lab_sessions,
+
+                "Lab_Consecutive_Periods": lab_periods,
+
+                "Total_Weekly_Periods": total_weekly_periods
+
+            })
+
+        # -----------------------------------------
+        # DISPLAY REQUIREMENTS
+        # -----------------------------------------
+        requirements_df = pd.DataFrame(
+            scheduling_requirements
+        )
+
+        st.divider()
+
+        st.subheader(
+            "Calculated Weekly Course Requirements"
+        )
+
+        if not requirements_df.empty:
+
+            st.dataframe(
+                requirements_df,
+                use_container_width=True
             )
 
-            if not requirements_df.empty:
+            col1, col2, col3, col4 = st.columns(4)
 
-                st.dataframe(
-                    requirements_df,
-                    use_container_width=True
+            col1.metric(
+                "Courses",
+                len(requirements_df)
+            )
+
+            col2.metric(
+                "Theory Sessions",
+                int(
+                    requirements_df[
+                        "Theory_Sessions_Per_Week"
+                    ].sum()
                 )
+            )
 
-                col1, col2, col3, col4 = st.columns(4)
-
-                col1.metric(
-                    "Courses",
-                    len(requirements_df)
+            col3.metric(
+                "Lab Sessions",
+                int(
+                    requirements_df[
+                        "Lab_Sessions_Per_Week"
+                    ].sum()
                 )
+            )
 
-                col2.metric(
-                    "Theory Sessions",
-                    int(
-                        requirements_df[
-                            "Theory_Sessions_Per_Week"
-                        ].sum()
-                    )
+            col4.metric(
+                "Total Weekly Periods",
+                int(
+                    requirements_df[
+                        "Total_Weekly_Periods"
+                    ].sum()
                 )
+            )
+        # -------------------------------------------------
+        # SAVE AND CONFIRM WEEKLY COURSE REQUIREMENTS
+        # -------------------------------------------------
+        if not requirements_df.empty:
+            previous_requirements = st.session_state.get("course_requirements")
+            requirements_changed = (
+                previous_requirements is None
+                or not isinstance(previous_requirements, pd.DataFrame)
+                or not previous_requirements.equals(requirements_df)
+            )
+            if requirements_changed:
+                st.session_state.course_requirements = requirements_df.copy()
+                st.session_state.course_requirements_confirmed = False
 
-                col3.metric(
-                    "Lab Sessions",
-                    int(
-                        requirements_df[
-                            "Lab_Sessions_Per_Week"
-                        ].sum()
-                    )
+            if st.button(
+                "Confirm Weekly Course Requirements",
+                type="primary",
+                use_container_width=True
+            ):
+                st.session_state.course_requirements = requirements_df.copy()
+                st.session_state.course_requirements_confirmed = True
+                st.session_state.config["course_requirements"] = (
+                    requirements_df.to_dict(orient="records")
                 )
+                st.success("Weekly course requirements confirmed!")
+        else:
+            st.session_state.course_requirements = pd.DataFrame()
+            st.session_state.course_requirements_confirmed = False
+            st.error("No course requirements were generated; confirmation is unavailable.")
 
-                col4.metric(
-                    "Total Weekly Periods",
-                    int(
-                        requirements_df[
-                            "Total_Weekly_Periods"
-                        ].sum()
-                    )
-                )
         # =================================================
         # CELL 18: LABORATORY REQUIREMENTS AND LAB ELIGIBILITY
         # =================================================
@@ -5078,6 +5184,15 @@ elif page == "8. Generate Timetable":
             # 10. SAVE TO SESSION STATE
             # -------------------------------------------------
 
+            previous_domains = st.session_state.get("scheduling_domains")
+            domains_changed = (
+                previous_domains is None
+                or previous_domains != SCHEDULING_DOMAINS
+            )
+            if domains_changed:
+                st.session_state.scheduling_domains_confirmed = False
+                st.session_state.conflict_graph_confirmed = False
+
             st.session_state.scheduling_domains = (
                 SCHEDULING_DOMAINS
             )
@@ -5093,6 +5208,19 @@ elif page == "8. Generate Timetable":
             st.session_state.empty_domain_sessions = (
                 EMPTY_DOMAIN_SESSIONS
             )
+
+            if st.button(
+                "Confirm Candidate Domains",
+                type="primary",
+                use_container_width=True
+            ):
+                if not EMPTY_DOMAIN_SESSIONS.empty:
+                    st.session_state.scheduling_domains_confirmed = False
+                    st.error("Cannot confirm candidate domains while empty domains remain.")
+                else:
+                    st.session_state.scheduling_domains_confirmed = True
+                    st.session_state.config["candidate_domains_confirmed"] = True
+                    st.success("Candidate domains confirmed. Review the conflict graph next.")
 
             # ============================================================
             # CELL 21: CONFLICT GRAPH + INTERACTIVE EXPLORER
@@ -5365,6 +5493,14 @@ elif page == "8. Generate Timetable":
             # 7. SAVE GRAPH DATA FOR FUTURE CSP ALGORITHMS
             # ------------------------------------------------------------
             
+            previous_graph_edges = st.session_state.get("STATIC_GRAPH_EDGES")
+            graph_changed = (
+                previous_graph_edges is None
+                or previous_graph_edges != STATIC_GRAPH_EDGES
+            )
+            if graph_changed:
+                st.session_state.conflict_graph_confirmed = False
+
             st.session_state.GRAPH_VERTICES = GRAPH_VERTICES
             
             st.session_state.STATIC_GRAPH_EDGES = (
@@ -6119,7 +6255,19 @@ elif page == "8. Generate Timetable":
             
             )
 
-            st.session_state.scheduling_domains_confirmed = False
+            st.divider()
+            if st.button(
+                "Confirm Conflict Graph",
+                type="primary",
+                use_container_width=True
+            ):
+                if not st.session_state.get("scheduling_domains_confirmed", False):
+                    st.error("Confirm candidate domains before confirming the conflict graph.")
+                    st.session_state.conflict_graph_confirmed = False
+                else:
+                    st.session_state.conflict_graph_confirmed = True
+                    st.session_state.config["conflict_graph_confirmed"] = True
+                    st.success("Conflict graph confirmed. CP-SAT is ready.")
 
 # =========================================================
 # 9. CP-SAT TIMETABLE SOLVER
@@ -6155,6 +6303,18 @@ elif page == "9. CP-SAT Timetable Solver":
             "Complete the scheduling dataset, domains, "
             "and conflict graph first."
         )
+
+    elif not st.session_state.get("scheduling_dataset_confirmed", False):
+
+        st.warning("Confirm the scheduling dataset on Page 8 first.")
+
+    elif not st.session_state.get("scheduling_domains_confirmed", False):
+
+        st.warning("Review and confirm candidate domains on Page 8 first.")
+
+    elif not st.session_state.get("conflict_graph_confirmed", False):
+
+        st.warning("Review and confirm the conflict graph on Page 8 first.")
 
     else:
 
