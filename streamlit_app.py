@@ -6425,13 +6425,21 @@ else:
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
 # =========================================================
-elif page == "10. View Generated Timetable":
+]elif page == "10. View Generated Timetable":
 
     st.header("📅 View Generated Timetable")
 
-    if "generated_timetable" not in st.session_state:
+    # CHECK IF TIMETABLE EXISTS
+    if (
+        "generated_timetable" not in st.session_state
+        or st.session_state.generated_timetable is None
+        or st.session_state.generated_timetable.empty
+    ):
+
         st.info("Generate the timetable using CP-SAT first.")
+
     else:
+
         timetable_df = st.session_state.generated_timetable.copy()
 
         st.success(
@@ -6439,66 +6447,187 @@ elif page == "10. View Generated Timetable":
             f"Status: {st.session_state.get('cpsat_status', 'Unknown')}"
         )
 
+        # -------------------------------------------------
+        # VIEW TYPE
+        # -------------------------------------------------
+
         view_type = st.selectbox(
             "View timetable by",
-            ["Master Timetable", "Section-wise", "Faculty-wise", "Laboratory-wise"],
+            [
+                "Master Timetable",
+                "Section-wise",
+                "Faculty-wise",
+                "Laboratory-wise"
+            ],
             key="independent_timetable_view_type"
         )
 
         filtered_df = timetable_df.copy()
 
+        # -------------------------------------------------
+        # FILTER CONFIGURATION
+        # -------------------------------------------------
+
         if view_type == "Section-wise":
+
             column = "Section_ID"
             label = "Select Section"
-            options = sorted(filtered_df[column].dropna().astype(str).unique()) if column in filtered_df.columns else []
+
+            options = (
+                sorted(
+                    filtered_df[column]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
+                if column in filtered_df.columns
+                else []
+            )
+
         elif view_type == "Faculty-wise":
+
             column = "Faculty_ID"
             label = "Select Faculty"
-            options = sorted(filtered_df[column].dropna().astype(str).unique()) if column in filtered_df.columns else []
-        elif view_type == "Laboratory-wise":
-            lab_mask = (
-                filtered_df.get("Session_Type", pd.Series(index=filtered_df.index, dtype=str)).astype(str).str.contains("Lab", case=False, na=False)
-                | filtered_df.get("Resource_Type", pd.Series(index=filtered_df.index, dtype=str)).astype(str).str.contains("Lab", case=False, na=False)
+
+            options = (
+                sorted(
+                    filtered_df[column]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
+                if column in filtered_df.columns
+                else []
             )
+
+        elif view_type == "Laboratory-wise":
+
+            lab_mask = (
+                filtered_df.get(
+                    "Session_Type",
+                    pd.Series(index=filtered_df.index, dtype=str)
+                )
+                .astype(str)
+                .str.contains("Lab", case=False, na=False)
+
+                |
+
+                filtered_df.get(
+                    "Resource_Type",
+                    pd.Series(index=filtered_df.index, dtype=str)
+                )
+                .astype(str)
+                .str.contains("Lab", case=False, na=False)
+            )
+
             filtered_df = filtered_df[lab_mask].copy()
+
             column = "Resource"
             label = "Select Laboratory"
-            options = sorted(filtered_df[column].dropna().astype(str).unique()) if column in filtered_df.columns else []
+
+            options = (
+                sorted(
+                    filtered_df[column]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
+                if column in filtered_df.columns
+                else []
+            )
+
         else:
+
             column = None
             options = []
 
+        # -------------------------------------------------
+        # ENTITY SELECTION
+        # -------------------------------------------------
+
         if column is not None:
+
             if options:
+
                 selected_value = st.selectbox(
-                    label, options, key=f"independent_timetable_entity_{view_type}"
+                    label,
+                    options,
+                    key=f"independent_timetable_entity_{view_type}"
                 )
-                filtered_df = filtered_df[filtered_df[column].astype(str) == selected_value].copy()
+
+                filtered_df = filtered_df[
+                    filtered_df[column].astype(str)
+                    == selected_value
+                ].copy()
+
             else:
-                st.warning(f"No available options for {view_type.lower()} view.")
+
+                st.warning(
+                    f"No available options for {view_type.lower()} view."
+                )
+
+        # -------------------------------------------------
+        # DISPLAY TIMETABLE
+        # -------------------------------------------------
 
         if not filtered_df.empty:
-            sort_columns = [c for c in ["Day", "Start_Period", "Semester", "Section_ID"] if c in filtered_df.columns]
+
+            # SORTING
+            sort_columns = [
+                c
+                for c in [
+                    "Day",
+                    "Start_Period",
+                    "Semester",
+                    "Section_ID"
+                ]
+                if c in filtered_df.columns
+            ]
+
             if sort_columns:
-                filtered_df = filtered_df.sort_values(sort_columns)
 
-            st.metric("Sessions displayed", len(filtered_df))
-            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+                filtered_df = filtered_df.sort_values(
+                    sort_columns
+                )
 
+            # SESSION COUNT
+            st.metric(
+                "Sessions displayed",
+                len(filtered_df)
+            )
+
+            # TABLE
+            st.dataframe(
+                filtered_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # DOWNLOAD
             st.download_button(
                 "⬇️ Download displayed timetable as CSV",
-                filtered_df.to_csv(index=False).encode("utf-8"),
+                data=filtered_df.to_csv(index=False).encode("utf-8"),
                 file_name=f"{view_type.replace(' ', '_')}_timetable.csv",
                 mime="text/csv",
                 key="independent_timetable_download"
             )
+
         else:
-            st.info("No timetable rows match this view.")
+
+            st.info(
+                "No timetable rows match this view."
+            )
+
 
 # =========================================================
 # FOOTER
 # =========================================================
+
 st.divider()
+
+st.caption(
+    "Graph-Based Timetable Conflict Detection and Resolution System"
+)
 
 st.caption(
     "Graph-Based Timetable Conflict Detection and Resolution System"
