@@ -1,96 +1,126 @@
-import streamlit as st
-import pandas as pd
-import json
-from datetime import datetime
-from io import BytesIO
-from docx import Document
-import io
-import re
-import networkx as nx
-import plotly.graph_objects as go
-import numpy as np
-import math
+                )
+                .astype(str)
+                .str.contains("Lab", case=False, na=False)
+
+                |
+
+                filtered_df.get(
+                    "Resource_Type",
+                    pd.Series(index=filtered_df.index, dtype=str)
+                )
+                .astype(str)
+                .str.contains("Lab", case=False, na=False)
+            )
+
+            filtered_df = filtered_df[lab_mask].copy()
+
+            column = "Resource"
+            label = "Select Laboratory"
+
+            options = (
+                sorted(
+                    filtered_df[column]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
+                if column in filtered_df.columns
+                else []
+            )
+
+        else:
+
+            column = None
+            options = []
+
+        # -------------------------------------------------
+        # ENTITY SELECTION
+        # -------------------------------------------------
+
+        if column is not None:
+
+            if options:
+
+                selected_value = st.selectbox(
+                    label,
+                    options,
+                    key=f"independent_timetable_entity_{view_type}"
+                )
+
+                filtered_df = filtered_df[
+                    filtered_df[column].astype(str)
+                    == selected_value
+                ].copy()
+
+            else:
+
+                st.warning(
+                    f"No available options for {view_type.lower()} view."
+                )
+
+        # -------------------------------------------------
+        # DISPLAY TIMETABLE
+        # -------------------------------------------------
+
+        if not filtered_df.empty:
+
+            # SORTING
+            sort_columns = [
+                c
+                for c in [
+                    "Day",
+                    "Start_Period",
+                    "Semester",
+                    "Section_ID"
+                ]
+                if c in filtered_df.columns
+            ]
+
+            if sort_columns:
+
+                filtered_df = filtered_df.sort_values(
+                    sort_columns
+                )
+
+            # SESSION COUNT
+            st.metric(
+                "Sessions displayed",
+                len(filtered_df)
+            )
+
+            # TABLE
+            st.dataframe(
+                filtered_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # DOWNLOAD
+            st.download_button(
+                "⬇️ Download displayed timetable as CSV",
+                data=filtered_df.to_csv(index=False).encode("utf-8"),
+                file_name=f"{view_type.replace(' ', '_')}_timetable.csv",
+                mime="text/csv",
+                key="independent_timetable_download"
+            )
+
+        else:
+
+            st.info(
+                "No timetable rows match this view."
+            )
 
 
 # =========================================================
-# PAGE CONFIG
+# FOOTER
 # =========================================================
-st.set_page_config(
-    page_title="Graph-Based Timetable Scheduler",
-    page_icon="📅",
-    layout="wide"
+
+st.divider()
+
+st.caption(
+    "Graph-Based Timetable Conflict Detection and Resolution System"
 )
 
-st.title("📅 Graph-Based Timetable Conflict Detection")
-st.caption("Academic Timetable Scheduling System")
-
-# =========================================================
-# SESSION STATE
-# =========================================================
-defaults = {
-    "config": {},
-    "config_confirmed": False,
-    "uploaded_data": {},
-    "files_confirmed": False,
-
-    # Confirmation states
-    "room_lab_confirmed": False,
-    "classroom_allocation_confirmed": False,
-    "lab_configuration_confirmed": False,
-    "course_requirements_confirmed": False,
-    "scheduling_dataset_confirmed": False,
-    "scheduling_domains_confirmed": False,
-    "conflict_graph_confirmed": False
-}
-
-for key, value in defaults.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
-
-# =========================================================
-# SIDEBAR
-# =========================================================
-page = st.sidebar.radio(
-    "Navigation",
-    [
-        "1. Programme Configuration",
-        "2. Academic Calendar",
-        "3. Faculty Workload",
-        "4. Configuration Review",
-        "5. Upload & Retrieve Files",
-        "6. Faculty Constraints & HOD Approval",
-        "7. Classroom & Laboratory Configuration",
-        "8. Generate Timetable",
-        "9. CP-SAT Timetable Solver",
-        "10. View Generated Timetable"
-    ]
+st.caption(
+    "Graph-Based Timetable Conflict Detection and Resolution System"
 )
-
-# =========================================================
-# 1. PROGRAMME CONFIGURATION
-# =========================================================
-if page == "1. Programme Configuration":
-
-    st.header("Academic Programme Configuration")
-
-    saved_programmes = st.session_state.config.get("academic_programmes", {})
-    semester_type = st.selectbox(
-        "Semester Type",
-        ["Odd", "Even"],
-        index=["Odd", "Even"].index(saved_programmes.get("semester_type", "Odd"))
-            if saved_programmes.get("semester_type", "Odd") in ["Odd", "Even"] else 0,
-        key="programme_semester_type"
-    )
-
-    st.subheader("B.Tech")
-
-    include_btech = st.checkbox(
-        "Include B.Tech",
-        value=saved_programmes.get("B.Tech", {}).get("included", True),
-        key="include_btech"
-    )
-
-    btech_sections = st.number_input(
-        "Number of B.Tech Sections",
-        min_value=1,
-        max_value=20,
