@@ -6415,13 +6415,6 @@ elif page == "8. Generate Timetable":
             key=f"download_{view_type}"
         )
 
-    else:
-    
-        st.info(
-            "Generate the timetable using CP-SAT first. "
-            "The timetable viewer will remain available after generation."
-        )
-
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
 # =========================================================
