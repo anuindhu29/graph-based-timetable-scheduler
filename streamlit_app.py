@@ -3231,10 +3231,8 @@ elif page == "8. Generate Timetable":
                         .replace(".", "")
                     )
 
-                    subject = (
-                        str(normalized_subject)
-                        .strip()
-                        .casefold()
+                    subject = normalize_subject_name(
+                        normalized_subject
                     )
 
                     year = (
