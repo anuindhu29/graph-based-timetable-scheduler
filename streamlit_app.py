@@ -6313,102 +6313,106 @@ elif page == "8. Generate Timetable":
                 st.info(
                     "Confirm the conflict graph before proceeding to CP-SAT."
                 )
-elif page == "9. CP-SAT Timetable Solver":
 
-    st.header("CP-SAT Timetable Generation")
+                            "Semester": session_data.get(
+                                "Semester", ""
+                            ),
 
-    st.write(
-        "Generate a feasible timetable using Google OR-Tools CP-SAT."
-    )
+                            "Section": session_data.get(
+                                "Section", ""
+                            ),
 
-    # -----------------------------------------------------
-    # 1. CHECK INPUT DATA
-    # -----------------------------------------------------
+                            "Course_Code": session_data.get(
+                                "Course_Code", ""
+                            ),
 
-    required_state = [
-        "scheduling_sessions",
-        "scheduling_domains",
-        "STATIC_GRAPH_EDGES"
-    ]
+                            "Course_Title": session_data.get(
+                                "Course_Title", ""
+                            ),
 
-    missing_state = [
-        item for item in required_state
-        if item not in st.session_state
-    ]
+                            "Session_Type": session_data.get(
+                                "Session_Type", ""
+                            ),
 
-    if missing_state:
+                            "Faculty_ID": selected_option[
+                                "Faculty_ID"
+                            ],
 
-        st.error(
-            "Required scheduling data is missing. "
-            "Complete the scheduling dataset, domains, "
-            "and conflict graph first."
-        )
+                            "Day": selected_option["Day"],
 
-    else:
+                            "Start_Period": selected_option[
+                                "Start_Period"
+                            ],
 
-        SESSIONS = st.session_state.scheduling_sessions.copy()
+                            "End_Period": selected_option[
+                                "End_Period"
+                            ],
 
-        DOMAINS = st.session_state.scheduling_domains
+                            "Start_Time": selected_option[
+                                "Start_Time"
+                            ],
 
-        GRAPH_EDGES = st.session_state.STATIC_GRAPH_EDGES
+                            "End_Time": selected_option[
+                                "End_Time"
+                            ],
 
-        # -------------------------------------------------
-        # 2. CHECK EMPTY DOMAINS
-        # -------------------------------------------------
+                            "Periods": selected_option[
+                                "Periods"
+                            ],
 
-        empty_sessions = [
-            session_id
-            for session_id, domain in DOMAINS.items()
-            if not domain
-        ]
+                            "Resource": selected_option[
+                                "Resource"
+                            ],
 
-        if empty_sessions:
+                            "Resource_Type": selected_option[
+                                "Resource_Type"
+                            ]
 
-            st.error(
-                f"{len(empty_sessions)} session(s) have empty domains."
-            )
+                        })
 
-            st.write(empty_sessions)
+                    TIMETABLE_DF = pd.DataFrame(
+                        timetable_records
+                    )
 
-        else:
+                    # ---------------------------------------------
+                    # SAVE RESULTS
+                    # ---------------------------------------------
 
-            st.success(
-                f"All {len(DOMAINS)} sessions have candidate assignments."
-            )
+                    st.session_state.generated_timetable = (
+                        TIMETABLE_DF
+                    )
 
-        # -------------------------------------------------
-        # 3. GRAPH CONFLICT LOOKUP
-        # -------------------------------------------------
+                    st.session_state.cpsat_status = (
+                        solver.StatusName(status)
+                    )
 
-        SECTION_CONFLICT_PAIRS = set()
+                    st.session_state.cpsat_runtime = (
+                        solver.WallTime()
+                    )
 
-        for edge in GRAPH_EDGES:
+                    st.session_state.cpsat_constraints = {
 
-            a = str(edge["Source"])
-            b = str(edge["Target"])
+                        "Section Conflict Constraints":
+                            section_constraints,
 
-            SECTION_CONFLICT_PAIRS.add(
-                tuple(sorted((a, b)))
-            )
+                        "Faculty Conflict Constraints":
+                            faculty_constraints,
 
-        # -------------------------------------------------
-        # 4. SOLVER BUTTON
-        # -------------------------------------------------
+                        "Resource Conflict Constraints":
+                            resource_constraints
+                    }
+        
+            # =====================================================
 
-        if st.button(
-            "🚀 Generate Timetable using CP-SAT",
-            type="primary"
-        ):
+                else:
 
-            if empty_sessions:
+                    st.error(
+                        f"CP-SAT could not generate a timetable. "
+                        f"Solver status: {solver.StatusName(status)}"
+                    )
 
-                st.error(
-                    "Cannot generate timetable because "
-                    "some sessions have empty domains."
-                )
-
-            else:
-
+                    st.session_state.cpsat_status = solver.StatusName(status)
+                    st.session_state.cpsat_runtime = solver.WallTime()
 
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
