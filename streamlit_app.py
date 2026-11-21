@@ -2339,6 +2339,286 @@ elif page == "8. Generate Timetable":
                         5. Construct the scheduling conflict graph.
                         """
                     )
+                            # =================================================
+        # SECTION GENERATION & FIXED CLASSROOM ALLOCATION
+        # =================================================
+
+        st.divider()
+        st.subheader("Section Generation & Fixed Classroom Allocation")
+
+        if st.session_state.get(
+            "course_requirements_confirmed",
+            False
+        ):
+
+            requirements = st.session_state.course_requirements.copy()
+
+            academic_config = st.session_state.config[
+                "academic_programmes"
+            ]
+
+            # ---------------------------------------------
+            # 1. GENERATE SECTION LIST
+            # ---------------------------------------------
+
+            section_records = []
+
+            programme_semesters = (
+                requirements[
+                    ["Programme", "Semester"]
+                ]
+                .drop_duplicates()
+                .reset_index(drop=True)
+            )
+
+            for _, row in programme_semesters.iterrows():
+
+                programme = row["Programme"]
+                semester = int(row["Semester"])
+
+                programme_config = academic_config.get(
+                    programme,
+                    {}
+                )
+
+                section_count = int(
+                    programme_config.get("sections", 0)
+                )
+
+                for section_number in range(section_count):
+
+                    section_label = chr(65 + section_number)
+
+                    section_id = (
+                        f"{programme}_SEM_{semester}_"
+                        f"SECTION_{section_label}"
+                    )
+
+                    section_records.append({
+
+                        "Section_ID": section_id,
+
+                        "Programme": programme,
+
+                        "Semester": semester,
+
+                        "Section": section_label
+
+                    })
+
+            section_df = pd.DataFrame(section_records)
+
+            st.session_state.section_list = section_df.copy()
+
+            st.subheader("Generated Sections")
+
+            st.dataframe(
+                section_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.metric(
+                "Total Sections",
+                len(section_df)
+            )
+
+            # ---------------------------------------------
+            # 2. GET AVAILABLE CLASSROOMS
+            # ---------------------------------------------
+
+            if st.session_state.get(
+                "room_lab_confirmed",
+                False
+            ):
+
+                rooms_df = st.session_state.room_lab_config.copy()
+
+                classroom_df = rooms_df[
+                    rooms_df["Type"]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    == "classroom"
+                ].copy()
+
+                classroom_options = (
+                    classroom_df["Room/Lab ID"]
+                    .astype(str)
+                    .tolist()
+                )
+
+                st.write(
+                    "Available classrooms:",
+                    classroom_options
+                )
+
+                # -----------------------------------------
+                # 3. CHECK CLASSROOM COUNT
+                # -----------------------------------------
+
+                if len(classroom_options) < len(section_df):
+
+                    st.error(
+                        f"Insufficient classrooms. "
+                        f"Required: {len(section_df)}, "
+                        f"Available: {len(classroom_options)}."
+                    )
+
+                else:
+
+                    # -------------------------------------
+                    # 4. CLASSROOM ASSIGNMENT
+                    # -------------------------------------
+
+                    st.write(
+                        "Assign one fixed classroom to each section. "
+                        "A classroom cannot be assigned to multiple sections."
+                    )
+
+                    existing_mapping = st.session_state.get(
+                        "section_classroom_mapping",
+                        {}
+                    )
+
+                    current_mapping = {}
+
+                    for index, section in section_df.iterrows():
+
+                        section_id = section["Section_ID"]
+
+                        section_label = (
+                            f"{section['Programme']} | "
+                            f"Semester {section['Semester']} | "
+                            f"Section {section['Section']}"
+                        )
+
+                        default_room = classroom_options[index]
+
+                        previous_room = existing_mapping.get(
+                            section_id,
+                            default_room
+                        )
+
+                        if previous_room not in classroom_options:
+
+                            previous_room = default_room
+
+                        selected_room = st.selectbox(
+
+                            section_label,
+
+                            options=classroom_options,
+
+                            index=classroom_options.index(
+                                previous_room
+                            ),
+
+                            key=f"classroom_{section_id}"
+
+                        )
+
+                        current_mapping[section_id] = selected_room
+
+                    # -------------------------------------
+                    # 5. CONFIRM CLASSROOM ALLOCATION
+                    # -------------------------------------
+
+                    if st.button(
+                        "Confirm Fixed Classroom Allocation",
+                        type="primary",
+                        use_container_width=True
+                    ):
+
+                        assigned_rooms = list(
+                            current_mapping.values()
+                        )
+
+                        duplicate_rooms = (
+                            len(assigned_rooms)
+                            != len(set(assigned_rooms))
+                        )
+
+                        if duplicate_rooms:
+
+                            st.error(
+                                "A classroom is assigned to multiple "
+                                "sections. Please correct the allocation."
+                            )
+
+                        else:
+
+                            mapping_records = []
+
+                            for _, section in section_df.iterrows():
+
+                                section_id = section["Section_ID"]
+
+                                mapping_records.append({
+
+                                    "Section_ID": section_id,
+
+                                    "Programme": section["Programme"],
+
+                                    "Semester": section["Semester"],
+
+                                    "Section": section["Section"],
+
+                                    "Classroom": current_mapping[
+                                        section_id
+                                    ]
+
+                                })
+
+                            mapping_df = pd.DataFrame(
+                                mapping_records
+                            )
+
+                            st.session_state.section_classroom_mapping = (
+                                current_mapping.copy()
+                            )
+
+                            st.session_state.section_classroom_mapping_df = (
+                                mapping_df.copy()
+                            )
+
+                            st.session_state.classroom_allocation_confirmed = True
+
+                            st.session_state.config[
+                                "section_classroom_mapping"
+                            ] = mapping_records
+
+                            st.success(
+                                "Fixed classroom allocation confirmed!"
+                            )
+
+                            st.dataframe(
+                                mapping_df,
+                                use_container_width=True,
+                                hide_index=True
+                            )
+
+                            st.download_button(
+                                "Download Section–Classroom Mapping",
+                                data=mapping_df.to_csv(
+                                    index=False
+                                ).encode("utf-8"),
+                                file_name="SECTION_CLASSROOM_MAPPING.csv",
+                                mime="text/csv"
+                            )
+
+            else:
+
+                st.warning(
+                    "Confirm Classroom & Laboratory Configuration "
+                    "on Page 7 first."
+                )
+
+        else:
+
+            st.warning(
+                "Confirm Weekly Course Requirements first."
+            )
         # =================================================
         # SCHEDULING SESSION GENERATION
         # =================================================
@@ -2629,283 +2909,7 @@ elif page == "8. Generate Timetable":
             st.warning(
                 "Confirm Weekly Course Requirements first."
             ) 
-                # =================================================
-        # FACULTY–COURSE ELIGIBILITY MAPPING
-        # =================================================
-
-        st.divider()
-        st.subheader("Faculty–Course Eligibility Mapping")
-
-        if (
-            st.session_state.get("course_requirements_confirmed", False)
-            and st.session_state.get("generated_sessions") is not None
-        ):
-
-            requirements = st.session_state.course_requirements
-
-            faculty_approvals = st.session_state.get(
-                "faculty_approvals",
-                []
-            )
-
-            existing_faculty_mapping = st.session_state.get(
-                "faculty_course_mapping",
-                {}
-            )
-
-            faculty_options_by_course = {}
-            current_faculty_mapping = {}
-
-            # ---------------------------------------------
-            # IDENTIFY APPROVED FACULTY FOR EACH COURSE
-            # ---------------------------------------------
-
-            for _, course in requirements.iterrows():
-
-                programme = str(course["Programme"])
-                semester = int(course["Semester"])
-                course_id = str(course["Course_ID"])
-
-                course_key = (
-                    f"{programme}_Sem{semester}_{course_id}"
-                )
-
-                # Determine academic year
-                if programme == "B.Tech":
-                    academic_year = f"Year {semester // 2}"
-
-                else:
-                    academic_year = f"Year {(semester + 1) // 2}"
-
-                eligible_faculty = []
-
-                for faculty in faculty_approvals:
-
-                    faculty_id = str(faculty["Faculty_ID"])
-                    faculty_name = str(faculty["Faculty_Name"])
-
-                    if programme == "B.Tech":
-
-                        approved = faculty.get(
-                            "BTech_Approved",
-                            False
-                        )
-
-                        approved_years = faculty.get(
-                            "BTech_Years",
-                            []
-                        )
-
-                    else:
-
-                        approved = faculty.get(
-                            "MTech_Approved",
-                            False
-                        )
-
-                        approved_years = faculty.get(
-                            "MTech_Years",
-                            []
-                        )
-
-                    if (
-                        approved
-                        and academic_year in approved_years
-                    ):
-
-                        eligible_faculty.append({
-                            "Faculty_ID": faculty_id,
-                            "Faculty_Name": faculty_name
-                        })
-
-                faculty_options_by_course[course_key] = (
-                    eligible_faculty
-                )
-
-                # -----------------------------------------
-                # DISPLAY COURSE
-                # -----------------------------------------
-
-                course_label = (
-                    f"{programme} | Semester {semester} | "
-                    f"{course_id} — {course['Course_Name']}"
-                )
-
-                st.markdown(f"**{course_label}**")
-
-                option_labels = {
-                    f"{f['Faculty_Name']} ({f['Faculty_ID']})":
-                    f["Faculty_ID"]
-                    for f in eligible_faculty
-                }
-
-                previous_ids = existing_faculty_mapping.get(
-                    course_key,
-                    []
-                )
-
-                previous_labels = [
-                    label
-                    for label, faculty_id in option_labels.items()
-                    if faculty_id in previous_ids
-                ]
-
-                selected_faculty = st.multiselect(
-                    "Eligible faculty for this course",
-                    options=list(option_labels.keys()),
-                    default=previous_labels,
-                    key=f"faculty_course_{course_key}"
-                )
-
-                current_faculty_mapping[course_key] = [
-                    option_labels[label]
-                    for label in selected_faculty
-                ]
-
-                if not eligible_faculty:
-
-                    st.warning(
-                        f"No faculty approval found for "
-                        f"{course_id} ({programme}, {academic_year})."
-                    )
-
-            # ---------------------------------------------
-            # SAVE MAPPING
-            # ---------------------------------------------
-
-            if st.button(
-                "Save Faculty–Course Mapping",
-                type="primary",
-                use_container_width=True
-            ):
-
-                mapping_errors = []
-
-                for course_key, selected_ids in (
-                    current_faculty_mapping.items()
-                ):
-
-                    if not selected_ids:
-
-                        mapping_errors.append(
-                            f"{course_key}: Select at least "
-                            "one eligible faculty member."
-                        )
-
-                if mapping_errors:
-
-                    st.error(
-                        "Please assign faculty candidates "
-                        "to every course:"
-                    )
-
-                    for error in mapping_errors:
-                        st.write("❌", error)
-
-                else:
-
-                    st.session_state.faculty_course_mapping = (
-                        current_faculty_mapping.copy()
-                    )
-
-                    st.session_state.config[
-                        "faculty_course_mapping"
-                    ] = current_faculty_mapping.copy()
-
-                    # -------------------------------------
-                    # UPDATE GENERATED SESSIONS
-                    # -------------------------------------
-
-                    sessions_df = (
-                        st.session_state.generated_sessions.copy()
-                    )
-
-                    sessions_df["Faculty_Candidates"] = (
-                        sessions_df.apply(
-                            lambda row: current_faculty_mapping.get(
-                                f"{row['Programme']}_"
-                                f"Sem{row['Semester']}_"
-                                f"{row['Course_ID']}",
-                                []
-                            ),
-                            axis=1
-                        )
-                    )
-
-                    st.session_state.generated_sessions = (
-                        sessions_df.copy()
-                    )
-
-                    st.session_state.config[
-                        "generated_sessions"
-                    ] = sessions_df.to_dict(
-                        orient="records"
-                    )
-
-                    st.session_state.faculty_course_mapping_confirmed = True
-
-                    st.success(
-                        "Faculty–Course Mapping saved successfully!"
-                    )
-
-                    st.subheader("Faculty Assignment Candidates")
-
-                    mapping_display = []
-
-                    for _, course in requirements.iterrows():
-
-                        course_key = (
-                            f"{course['Programme']}_"
-                            f"Sem{course['Semester']}_"
-                            f"{course['Course_ID']}"
-                        )
-
-                        selected_ids = (
-                            current_faculty_mapping.get(
-                                course_key,
-                                []
-                            )
-                        )
-
-                        selected_names = [
-                            f["Faculty_Name"]
-                            for f in faculty_approvals
-                            if str(f["Faculty_ID"]) in selected_ids
-                        ]
-
-                        mapping_display.append({
-                            "Programme": course["Programme"],
-                            "Semester": course["Semester"],
-                            "Course_ID": course["Course_ID"],
-                            "Course_Name": course["Course_Name"],
-                            "Eligible_Faculty": ", ".join(
-                                selected_names
-                            )
-                        })
-
-                    st.dataframe(
-                        pd.DataFrame(mapping_display),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-                    st.download_button(
-                        "Download Faculty–Course Mapping",
-                        data=pd.DataFrame(
-                            mapping_display
-                        ).to_csv(
-                            index=False
-                        ).encode("utf-8"),
-                        file_name="FACULTY_COURSE_MAPPING.csv",
-                        mime="text/csv"
-                    )
-
-        else:
-
-            st.info(
-                "First confirm Weekly Course Requirements and "
-                "generate Scheduling Sessions."
-            )      
+ 
 # =========================================================
 # FOOTER
 # =========================================================
