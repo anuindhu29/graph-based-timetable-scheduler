@@ -6374,7 +6374,7 @@ elif page == "8. Generate Timetable":
 
             # CHART SETTINGS
             fig.update_layout(
-                title=f"{view_type} - {selected}",
+                title=f"{view_type} - {selected_value if 'selected_value' in locals() else 'All'}",
                 height=max(700, len(periods) * 90),
                 xaxis=dict(
                     tickmode="array",
