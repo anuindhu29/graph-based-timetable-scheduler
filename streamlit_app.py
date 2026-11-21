@@ -1636,85 +1636,29 @@ elif page == "8. Generate Timetable":
             st.stop()
 
         # =============================================
-        # WORKFLOW PROGRESS
+        # WORKFLOW STATUS
         # =============================================
 
-        st.markdown("### Workflow Progress")
-
-        workflow_stages = [
-            "Session Generation",
-            "Scheduling Domains",
-            "Conflict Graph",
-            "Graph Analysis",
-            "CSP Solver",
-            "Timetable Generation",
-            "Validation & Export"
-        ]
-
-        if st.session_state.get(
+        if not st.session_state.get(
             "scheduling_dataset_confirmed", False
         ):
-            current_stage = 1
-        else:
-            current_stage = 0
 
-        if st.session_state.get(
-            "scheduling_domains", None
-        ) is not None:
-            current_stage = max(current_stage, 2)
+            st.markdown("### Stage 1 of 7 — Session Generation")
 
-        progress_value = (
-            current_stage / len(workflow_stages)
-        )
+            st.progress(1 / 7)
 
-        st.progress(progress_value)
-
-        st.caption(
-            f"Completed {current_stage} of "
-            f"{len(workflow_stages)} stages"
-        )
-
-        st.write(
-            "➡️ Current Stage:",
-            workflow_stages[
-                min(current_stage, len(workflow_stages) - 1)
-            ]
-        )
-
-        # =============================================
-        # WORKFLOW NAVIGATION
-        # =============================================
-
-        st.divider()
-
-        nav_col1, nav_col2, nav_col3 = st.columns(
-            [1, 2, 1]
-        )
-
-        with nav_col1:
-
-            if st.button(
-                "⬅️ Previous",
-                disabled=True,
-                use_container_width=True
-            ):
-                pass
-
-        with nav_col2:
-
-            st.markdown(
-                "<div style='text-align:center'>"
-                "<b>Stage 1: Session Generation</b>"
-                "</div>",
-                unsafe_allow_html=True
+            st.caption(
+                "Generate, review, and confirm the scheduling dataset."
             )
 
-        with nav_col3:
+        else:
 
-            st.button(
-                "Next ➡️",
-                disabled=True,
-                use_container_width=True
+            st.markdown("### Stage 2 of 7 — Scheduling Domains")
+
+            st.progress(2 / 7)
+
+            st.caption(
+                "Scheduling dataset confirmed. Generating valid assignment domains."
             )
 
         st.divider()
