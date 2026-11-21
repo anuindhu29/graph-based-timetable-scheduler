@@ -6373,29 +6373,29 @@ elif page == "8. Generate Timetable":
                 )
 
             # CHART SETTINGS
-            fig.update_layout(
-                title=f"{view_type} - {selected_value if 'selected_value' in locals() else 'All'}",
-                height=max(700, len(periods) * 90),
-                xaxis=dict(
-                    tickmode="array",
-                    tickvals=list(range(len(days))),
-                    ticktext=days,
-                    side="top",
-                    range=[-0.5, len(days) - 0.5]
-                ),
-                yaxis=dict(
-                    tickmode="array",
-                    tickvals=list(range(len(periods))),
-                    ticktext=period_labels,
-                    autorange="reversed"
-                ),
-                showlegend=False
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+                fig.update_layout(
+                    title=f"{view_type} - {selected_value if 'selected_value' in locals() else 'All'}",
+                    height=max(700, len(periods) * 90),
+                    xaxis=dict(
+                        tickmode="array",
+                        tickvals=list(range(len(days))),
+                        ticktext=days,
+                        side="top",
+                        range=[-0.5, len(days) - 0.5]
+                    ),
+                    yaxis=dict(
+                        tickmode="array",
+                        tickvals=list(range(len(periods))),
+                        ticktext=period_labels,
+                        autorange="reversed"
+                    ),
+                    showlegend=False
+                )
+        
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
 
         # DETAILS
         with st.expander("View Timetable Data"):
