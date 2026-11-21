@@ -5055,43 +5055,7 @@ elif page == "8. Generate Timetable":
 
             st.session_state.scheduling_domains_confirmed = False
 
-            # -------------------------------------------------
-            # 11. CONFIRM DOMAINS
-            # -------------------------------------------------
 
-            if st.button(
-                "Confirm Scheduling Domains",
-                type="primary",
-                use_container_width=True
-            ):
-
-                if not EMPTY_DOMAIN_SESSIONS.empty:
-
-                    st.session_state.scheduling_domains_confirmed = False
-
-                    st.error(
-                        "Cannot confirm: empty domains exist."
-                    )
-
-                else:
-
-                    st.session_state.scheduling_domains_confirmed = True
-
-                    st.session_state.config[
-                        "scheduling_domains_summary"
-                    ] = DOMAIN_SUMMARY_DF.to_dict(
-                        orient="records"
-                    )
-
-                    st.session_state.config[
-                        "scheduling_domains"
-                    ] = SCHEDULING_DOMAINS
-
-                    st.success(
-                        "Scheduling domains confirmed successfully!"
-                    )
-
-                    st.rerun()
 # =========================================================
 # FOOTER
 # =========================================================
