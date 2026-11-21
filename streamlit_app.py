@@ -6566,229 +6566,425 @@ elif page == "9. CP-SAT Timetable Solver":
                         "Resource Conflict Constraints":
                             resource_constraints
                     }
-           
+        
                     # =====================================================
-                    # DISPLAY SAVED TIMETABLE (OUTSIDE GENERATE BUTTON)
+                    # PERSISTENT TIMETABLE VIEWER
+                    # OUTSIDE THE GENERATE BUTTON
                     # =====================================================
             
                     if "generated_timetable" in st.session_state:
             
-                        TIMETABLE_DF = st.session_state.generated_timetable
+                        TIMETABLE_DF = st.session_state.generated_timetable.copy()
             
-                        st.divider()
-                        st.subheader("Solver Result")
+                        if not TIMETABLE_DF.empty:
             
-                        st.success(
-                            f"Timetable generated successfully — "
-                            f"Solver Status: {st.session_state.get('cpsat_status', 'Unknown')}"
-                        )
+                            st.divider()
+                            st.header("📅 Timetable Viewer")
             
-                        col1, col2, col3 = st.columns(3)
+                            # ---------------------------------------------
+                            # FIRST SELECTION: VIEW TYPE
+                            # ---------------------------------------------
             
-                        col1.metric("Sessions Scheduled", len(TIMETABLE_DF))
+                            timetable_type = st.selectbox(
+                                "Select Timetable Type",
+                                [
+                                    "Section-wise",
+                                    "Faculty-wise",
+                                    "Laboratory-wise",
+                                    "Master Timetable"
+                                ],
+                                key="timetable_view_type"
+                            )
             
-                        col2.metric(
-                            "Solver Runtime",
-                            f"{st.session_state.get('cpsat_runtime', 0):.2f} seconds"
-                        )
+                            # ---------------------------------------------
+                            # SECOND SELECTION: ENTITY
+                            # ---------------------------------------------
             
-                        col3.metric(
-                            "Conflict Graph Edges",
-                            len(st.session_state.STATIC_GRAPH_EDGES)
-                        )
+                            if timetable_type == "Section-wise":
             
-                        # Constraint statistics
-                        st.subheader("CP-SAT Constraint Statistics")
-            
-                        constraints = st.session_state.get(
-                            "cpsat_constraints", {}
-                        )
-            
-                        col1, col2, col3, col4 = st.columns(4)
-            
-                        section_count = constraints.get(
-                            "Section Conflict Constraints", 0
-                        )
-            
-                        faculty_count = constraints.get(
-                            "Faculty Conflict Constraints", 0
-                        )
-            
-                        resource_count = constraints.get(
-                            "Resource Conflict Constraints", 0
-                        )
-            
-                        col1.metric("Section Constraints", f"{section_count:,}")
-                        col2.metric("Faculty Constraints", f"{faculty_count:,}")
-                        col3.metric("Resource Constraints", f"{resource_count:,}")
-                        col4.metric(
-                            "Total Constraints",
-                            f"{section_count + faculty_count + resource_count:,}"
-                        )
-            
-                        st.caption(
-                            "Assignment-level constraints are different from "
-                            "the number of edges in the conflict graph."
-                        )
-            
-                        # =================================================
-                        # GRAPHICAL TIMETABLE
-                        # =================================================
-            
-                        st.header("Graphical Timetable")
-            
-                        VALID_PERIODS = st.session_state.valid_periods
-            
-                        period_numbers = sorted(
-                            set(int(p["Period"]) for p in VALID_PERIODS)
-                        )
-            
-                        period_info = {
-                            int(p["Period"]): {
-                                "Start": p["Start_Time"],
-                                "End": p["End_Time"]
-                            }
-                            for p in VALID_PERIODS
-                        }
-            
-                        period_labels = [
-                            f"P{period}: {period_info[period]['Start']} - "
-                            f"{period_info[period]['End']}"
-                            for period in period_numbers
-                        ]
-            
-                        days = [
-                            "Monday", "Tuesday", "Wednesday",
-                            "Thursday", "Friday"
-                        ]
-            
-                        sections = sorted(
-                            TIMETABLE_DF["Section_ID"].astype(str).unique()
-                        )
-            
-                        selected_section = st.selectbox(
-                            "Select Section",
-                            sections,
-                            key="generated_section_view"
-                        )
-            
-                        section_df = TIMETABLE_DF[
-                            TIMETABLE_DF["Section_ID"].astype(str)
-                            == selected_section
-                        ].copy()
-            
-                        fig = go.Figure()
-            
-                        # Grid
-                        for day_index, day in enumerate(days):
-            
-                            for period_index, period in enumerate(period_numbers):
-            
-                                fig.add_shape(
-                                    type="rect",
-                                    x0=day_index - 0.5,
-                                    x1=day_index + 0.5,
-                                    y0=period_index - 0.5,
-                                    y1=period_index + 0.5,
-                                    line=dict(color="lightgrey", width=1),
-                                    fillcolor="white",
-                                    layer="below"
+                                entity_list = sorted(
+                                    TIMETABLE_DF["Section_ID"]
+                                    .dropna()
+                                    .astype(str)
+                                    .unique()
                                 )
             
-                        # Scheduled sessions
-                        for _, row in section_df.iterrows():
+                                entity_label = "Select Section"
             
-                            day = str(row["Day"])
+                                entity_column = "Section_ID"
             
-                            if day not in days:
-                                continue
+                            elif timetable_type == "Faculty-wise":
             
-                            day_index = days.index(day)
+                                entity_list = sorted(
+                                    TIMETABLE_DF["Faculty_ID"]
+                                    .dropna()
+                                    .astype(str)
+                                    .unique()
+                                )
             
-                            start_period = int(row["Start_Period"])
-                            end_period = int(row["End_Period"])
+                                entity_label = "Select Faculty"
             
-                            if start_period not in period_numbers:
-                                continue
+                                entity_column = "Faculty_ID"
             
-                            start_index = period_numbers.index(start_period)
+                            elif timetable_type == "Laboratory-wise":
             
-                            end_index = (
-                                period_numbers.index(end_period)
-                                if end_period in period_numbers
-                                else start_index
+                                lab_df = TIMETABLE_DF[
+                                    (
+                                        TIMETABLE_DF["Session_Type"]
+                                        .astype(str)
+                                        .str.contains("Lab", case=False)
+                                    )
+                                    |
+                                    (
+                                        TIMETABLE_DF["Resource_Type"]
+                                        .astype(str)
+                                        .str.contains("Lab", case=False)
+                                    )
+                                ]
+            
+                                entity_list = sorted(
+                                    lab_df["Resource"]
+                                    .dropna()
+                                    .astype(str)
+                                    .unique()
+                                )
+            
+                                entity_label = "Select Laboratory"
+            
+                                entity_column = "Resource"
+            
+                            else:
+            
+                                entity_list = ["All"]
+            
+                                entity_label = "Master Timetable"
+            
+                                entity_column = None
+            
+                            selected_entity = st.selectbox(
+                                entity_label,
+                                entity_list,
+                                key="timetable_entity_selection"
                             )
             
-                            fill_color = (
-                                "rgba(230,140,50,0.75)"
-                                if str(row["Session_Type"]) == "Laboratory"
-                                else "rgba(55,130,200,0.75)"
+                            # ---------------------------------------------
+                            # FILTER TIMETABLE
+                            # ---------------------------------------------
+            
+                            if timetable_type == "Master Timetable":
+            
+                                view_df = TIMETABLE_DF.copy()
+            
+                            elif timetable_type == "Laboratory-wise":
+            
+                                view_df = lab_df[
+                                    lab_df["Resource"].astype(str)
+                                    == selected_entity
+                                ].copy()
+            
+                            else:
+            
+                                view_df = TIMETABLE_DF[
+                                    TIMETABLE_DF[entity_column].astype(str)
+                                    == selected_entity
+                                ].copy()
+            
+                            view_df = view_df.sort_values(
+                                ["Day", "Start_Period"]
                             )
             
-                            fig.add_shape(
-                                type="rect",
-                                x0=day_index - 0.43,
-                                x1=day_index + 0.43,
-                                y0=start_index - 0.43,
-                                y1=end_index + 0.43,
-                                fillcolor=fill_color,
-                                line=dict(color="black", width=1)
+                            # ---------------------------------------------
+                            # DISPLAY ENTITY INFORMATION
+                            # ---------------------------------------------
+            
+                            st.subheader(
+                                f"{timetable_type}: {selected_entity}"
                             )
             
-                            label = (
-                                f"{row['Course_Code']}<br>"
-                                f"{row['Course_Title']}<br>"
-                                f"{row['Faculty_ID']}<br>"
-                                f"{row['Resource']}"
+                            st.metric(
+                                "Scheduled Sessions",
+                                len(view_df)
                             )
             
-                            fig.add_annotation(
-                                x=day_index,
-                                y=(start_index + end_index) / 2,
-                                text=label,
-                                showarrow=False,
-                                font=dict(size=10, color="black"),
-                                align="center"
-                            )
+                            # ---------------------------------------------
+                            # MASTER TIMETABLE
+                            # ---------------------------------------------
             
-                        fig.update_layout(
-                            title=f"Timetable — {selected_section}",
-                            height=max(700, len(period_numbers) * 90),
-                            xaxis=dict(
-                                tickmode="array",
-                                tickvals=list(range(len(days))),
-                                ticktext=days,
-                                range=[-0.5, len(days) - 0.5],
-                                side="top",
-                                showgrid=False
-                            ),
-                            yaxis=dict(
-                                tickmode="array",
-                                tickvals=list(range(len(period_numbers))),
-                                ticktext=period_labels,
-                                autorange="reversed",
-                                showgrid=False
-                            ),
-                            showlegend=False,
-                            margin=dict(l=150, r=30, t=100, b=30)
-                        )
+                            if timetable_type == "Master Timetable":
             
-                        st.plotly_chart(
-                            fig,
-                            use_container_width=True
-                        )
+                                st.info(
+                                    "Master timetable displays all sections, "
+                                    "faculty and resources together."
+                                )
             
-                        # Raw timetable
-                        with st.expander("View Generated Timetable Data"):
+                                st.dataframe(
+                                    TIMETABLE_DF.sort_values(
+                                        [
+                                            "Day",
+                                            "Start_Period",
+                                            "Section_ID"
+                                        ]
+                                    ),
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
             
-                            st.dataframe(
-                                TIMETABLE_DF.sort_values(
-                                    ["Section_ID", "Day", "Start_Period"]
+                            # ---------------------------------------------
+                            # GRAPHICAL TIMETABLE FOR SELECTED ENTITY
+                            # ---------------------------------------------
+            
+                            else:
+            
+                                VALID_PERIODS = (
+                                    st.session_state.valid_periods
+                                )
+            
+                                period_numbers = sorted(
+                                    set(
+                                        int(p["Period"])
+                                        for p in VALID_PERIODS
+                                    )
+                                )
+            
+                                period_info = {
+                                    int(p["Period"]): {
+                                        "Start": p["Start_Time"],
+                                        "End": p["End_Time"]
+                                    }
+                                    for p in VALID_PERIODS
+                                }
+            
+                                period_labels = [
+                                    (
+                                        f"P{period}: "
+                                        f"{period_info[period]['Start']} - "
+                                        f"{period_info[period]['End']}"
+                                    )
+                                    for period in period_numbers
+                                ]
+            
+                                days = [
+                                    "Monday",
+                                    "Tuesday",
+                                    "Wednesday",
+                                    "Thursday",
+                                    "Friday"
+                                ]
+            
+                                fig = go.Figure()
+            
+                                # -----------------------------------------
+                                # GRID
+                                # -----------------------------------------
+            
+                                for day_index, day in enumerate(days):
+            
+                                    for period_index, period in enumerate(
+                                        period_numbers
+                                    ):
+            
+                                        fig.add_shape(
+                                            type="rect",
+                                            x0=day_index - 0.5,
+                                            x1=day_index + 0.5,
+                                            y0=period_index - 0.5,
+                                            y1=period_index + 0.5,
+                                            line=dict(
+                                                color="lightgrey",
+                                                width=1
+                                            ),
+                                            fillcolor="white",
+                                            layer="below"
+                                        )
+            
+                                # -----------------------------------------
+                                # SESSION BLOCKS
+                                # -----------------------------------------
+            
+                                for _, row in view_df.iterrows():
+            
+                                    day = str(row["Day"])
+            
+                                    if day not in days:
+                                        continue
+            
+                                    day_index = days.index(day)
+            
+                                    start_period = int(
+                                        row["Start_Period"]
+                                    )
+            
+                                    end_period = int(
+                                        row["End_Period"]
+                                    )
+            
+                                    if start_period not in period_numbers:
+                                        continue
+            
+                                    start_index = period_numbers.index(
+                                        start_period
+                                    )
+            
+                                    end_index = (
+                                        period_numbers.index(end_period)
+                                        if end_period in period_numbers
+                                        else start_index
+                                    )
+            
+                                    is_lab = (
+                                        "lab"
+                                        in str(row["Session_Type"]).lower()
+                                    )
+            
+                                    fill_color = (
+                                        "rgba(230,140,50,0.75)"
+                                        if is_lab
+                                        else "rgba(55,130,200,0.75)"
+                                    )
+            
+                                    fig.add_shape(
+                                        type="rect",
+                                        x0=day_index - 0.43,
+                                        x1=day_index + 0.43,
+                                        y0=start_index - 0.43,
+                                        y1=end_index + 0.43,
+                                        fillcolor=fill_color,
+                                        line=dict(
+                                            color="black",
+                                            width=1
+                                        )
+                                    )
+            
+                                    # Entity-specific labels
+                                    if timetable_type == "Section-wise":
+            
+                                        label = (
+                                            f"{row['Course_Code']}<br>"
+                                            f"{row['Course_Title']}<br>"
+                                            f"{row['Faculty_ID']}<br>"
+                                            f"{row['Resource']}"
+                                        )
+            
+                                    elif timetable_type == "Faculty-wise":
+            
+                                        label = (
+                                            f"{row['Course_Code']}<br>"
+                                            f"{row['Course_Title']}<br>"
+                                            f"{row['Section_ID']}<br>"
+                                            f"{row['Resource']}"
+                                        )
+            
+                                    else:
+            
+                                        label = (
+                                            f"{row['Course_Code']}<br>"
+                                            f"{row['Course_Title']}<br>"
+                                            f"{row['Section_ID']}<br>"
+                                            f"{row['Faculty_ID']}"
+                                        )
+            
+                                    fig.add_annotation(
+                                        x=day_index,
+                                        y=(start_index + end_index) / 2,
+                                        text=label,
+                                        showarrow=False,
+                                        font=dict(
+                                            size=10,
+                                            color="black"
+                                        ),
+                                        align="center"
+                                    )
+            
+                                # -----------------------------------------
+                                # CHART LAYOUT
+                                # -----------------------------------------
+            
+                                fig.update_layout(
+                                    title=(
+                                        f"{timetable_type} — "
+                                        f"{selected_entity}"
+                                    ),
+                                    height=max(
+                                        700,
+                                        len(period_numbers) * 90
+                                    ),
+                                    xaxis=dict(
+                                        tickmode="array",
+                                        tickvals=list(range(len(days))),
+                                        ticktext=days,
+                                        range=[
+                                            -0.5,
+                                            len(days) - 0.5
+                                        ],
+                                        side="top",
+                                        showgrid=False
+                                    ),
+                                    yaxis=dict(
+                                        tickmode="array",
+                                        tickvals=list(
+                                            range(len(period_numbers))
+                                        ),
+                                        ticktext=period_labels,
+                                        autorange="reversed",
+                                        showgrid=False
+                                    ),
+                                    showlegend=False,
+                                    margin=dict(
+                                        l=150,
+                                        r=30,
+                                        t=100,
+                                        b=30
+                                    )
+                                )
+            
+                                st.plotly_chart(
+                                    fig,
+                                    use_container_width=True
+                                )
+            
+                                # -----------------------------------------
+                                # DATA TABLE
+                                # -----------------------------------------
+            
+                                with st.expander(
+                                    "View Timetable Details"
+                                ):
+            
+                                    st.dataframe(
+                                        view_df,
+                                        use_container_width=True,
+                                        hide_index=True
+                                    )
+            
+                            # ---------------------------------------------
+                            # DOWNLOAD
+                            # ---------------------------------------------
+            
+                            st.download_button(
+                                "⬇️ Download Current Timetable View",
+                                data=view_df.to_csv(
+                                    index=False
+                                ).encode("utf-8"),
+                                file_name=(
+                                    f"{timetable_type.replace(' ', '_')}_"
+                                    f"{selected_entity}.csv"
                                 ),
-                                use_container_width=True,
-                                hide_index=True
+                                mime="text/csv",
+                                key="download_current_timetable"
                             )
-
+            
+                        else:
+            
+                            st.warning(
+                                "The generated timetable is empty."
+                            )
+            
+                    else:
+            
+                        st.info(
+                            "No timetable has been generated yet. "
+                            "Click Generate Timetable using CP-SAT above."
+                        )
 # =========================================================
 # FOOTER
 # =========================================================
