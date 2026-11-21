@@ -6397,23 +6397,23 @@ elif page == "8. Generate Timetable":
                     use_container_width=True
                 )
 
-        # DETAILS
-        with st.expander("View Timetable Data"):
+            # DETAILS
+            with st.expander("View Timetable Data"):
 
-        st.dataframe(
-            view_df,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        # DOWNLOAD
-        st.download_button(
-            "Download Timetable CSV",
-            data=view_df.to_csv(index=False).encode("utf-8"),
-            file_name=f"{view_type}_{selected}.csv",
-            mime="text/csv",
-            key=f"download_{view_type}"
-        )
+                st.dataframe(
+                    view_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+        
+                # DOWNLOAD
+                st.download_button(
+                    "Download Timetable CSV",
+                    data=view_df.to_csv(index=False).encode("utf-8"),
+                    file_name=f"{view_type}_{selected}.csv",
+                    mime="text/csv",
+                    key=f"download_{view_type}"
+                )
 
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
