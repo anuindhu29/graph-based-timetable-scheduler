@@ -5522,14 +5522,13 @@ elif page == "8. Generate Timetable":
                     f"<b>Subject:</b> {target_data['Course_Title']}<br>"
                     f"<b>Course Code:</b> {target_data['Course_Code']}<br><br>"
                 
-                    f"<b>Section:</b> {edge['Section_ID']}<br>"
-                    f"<b>Conflict:</b> Same section cannot attend "
-                    f"both sessions simultaneously.<br><br>"
+                    f"<b>Section:</b> {edge['Section_ID']}<br><br>"
                 
-                    f"<b>Common Candidate Time Slots:</b><br>"
-                    f"{common_slots_text}<br><br>"
+                    f"<b>Conflict:</b> Both sessions belong to the "
+                    f"same student section.<br>"
                 
-                    f"<i>These are candidate slots, not final assigned times.</i>"
+                    f"<b>Constraint:</b> They cannot be scheduled "
+                    f"on the same day and time slot."
                 )
                                             
             
