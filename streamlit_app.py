@@ -6310,121 +6310,121 @@ elif page == "8. Generate Timetable":
                 st.info(
                     "Confirm the conflict graph before proceeding to CP-SAT."
                 )
-                                if end_period in periods:
-                                    end_idx = periods.index(end_period)
-                                else:
-                                    end_idx = start_idx
-    
-                                is_lab = (
-                                    "lab" in str(row["Session_Type"]).lower()
-                                )
-    
-                                color = (
-                                    "rgba(230,140,50,0.75)"
-                                    if is_lab
-                                    else "rgba(55,130,200,0.75)"
-                                )
-    
-                                fig.add_shape(
-                                    type="rect",
-                                    x0=day_idx - 0.43,
-                                    x1=day_idx + 0.43,
-                                    y0=start_idx - 0.43,
-                                    y1=end_idx + 0.43,
-                                    fillcolor=color,
-                                    line=dict(color="black")
-                                )
-    
-                                # LABEL
-                                if view_type == "Section-wise":
-    
-                                    label = (
-                                        f"{row['Course_Code']}<br>"
-                                        f"{row['Course_Title']}<br>"
-                                        f"Faculty: {row['Faculty_ID']}<br>"
-                                        f"{row['Resource']}"
-                                    )
-    
-                                elif view_type == "Faculty-wise":
-    
-                                    label = (
-                                        f"{row['Course_Code']}<br>"
-                                        f"{row['Course_Title']}<br>"
-                                        f"Section: {row['Section_ID']}<br>"
-                                        f"{row['Resource']}"
-                                    )
-    
-                                else:
-    
-                                    label = (
-                                        f"{row['Course_Code']}<br>"
-                                        f"{row['Course_Title']}<br>"
-                                        f"Section: {row['Section_ID']}<br>"
-                                        f"Faculty: {row['Faculty_ID']}"
-                                    )
-    
-                                fig.add_annotation(
-                                    x=day_idx,
-                                    y=(start_idx + end_idx) / 2,
-                                    text=label,
-                                    showarrow=False,
-                                    font=dict(size=10, color="black"),
-                                    align="center"
-                                )
-    
-                            # CHART SETTINGS
-                            fig.update_layout(
-                                title=f"{view_type} - {selected}",
-                                height=max(700, len(periods) * 90),
-                                xaxis=dict(
-                                    tickmode="array",
-                                    tickvals=list(range(len(days))),
-                                    ticktext=days,
-                                    side="top",
-                                    range=[-0.5, len(days) - 0.5]
-                                ),
-                                yaxis=dict(
-                                    tickmode="array",
-                                    tickvals=list(range(len(periods))),
-                                    ticktext=period_labels,
-                                    autorange="reversed"
-                                ),
-                                showlegend=False
-                            )
-    
-                            st.plotly_chart(
-                                fig,
-                                use_container_width=True
-                            )
-    
-                        # DETAILS
-                        with st.expander("View Timetable Data"):
-    
-                            st.dataframe(
-                                view_df,
-                                use_container_width=True,
-                                hide_index=True
-                            )
-    
-                        # DOWNLOAD
-                        st.download_button(
-                            "Download Timetable CSV",
-                            data=view_df.to_csv(index=False).encode("utf-8"),
-                            file_name=f"{view_type}_{selected}.csv",
-                            mime="text/csv",
-                            key=f"download_{view_type}"
-                        )
-    
-                    else:
-    
-                        st.warning("No timetable data available for this selection.")
-    
-            else:
-    
-                st.info(
-                    "Generate the timetable using CP-SAT first. "
-                    "The timetable viewer will remain available after generation."
+                if end_period in periods:
+                    end_idx = periods.index(end_period)
+                else:
+                    end_idx = start_idx
+
+                is_lab = (
+                    "lab" in str(row["Session_Type"]).lower()
                 )
+
+                color = (
+                    "rgba(230,140,50,0.75)"
+                    if is_lab
+                    else "rgba(55,130,200,0.75)"
+                )
+
+                fig.add_shape(
+                    type="rect",
+                    x0=day_idx - 0.43,
+                    x1=day_idx + 0.43,
+                    y0=start_idx - 0.43,
+                    y1=end_idx + 0.43,
+                    fillcolor=color,
+                    line=dict(color="black")
+                )
+
+                # LABEL
+                if view_type == "Section-wise":
+
+                    label = (
+                        f"{row['Course_Code']}<br>"
+                        f"{row['Course_Title']}<br>"
+                        f"Faculty: {row['Faculty_ID']}<br>"
+                        f"{row['Resource']}"
+                    )
+
+                elif view_type == "Faculty-wise":
+
+                    label = (
+                        f"{row['Course_Code']}<br>"
+                        f"{row['Course_Title']}<br>"
+                        f"Section: {row['Section_ID']}<br>"
+                        f"{row['Resource']}"
+                    )
+
+                else:
+
+                    label = (
+                        f"{row['Course_Code']}<br>"
+                        f"{row['Course_Title']}<br>"
+                        f"Section: {row['Section_ID']}<br>"
+                        f"Faculty: {row['Faculty_ID']}"
+                    )
+
+                fig.add_annotation(
+                    x=day_idx,
+                    y=(start_idx + end_idx) / 2,
+                    text=label,
+                    showarrow=False,
+                    font=dict(size=10, color="black"),
+                    align="center"
+                )
+
+            # CHART SETTINGS
+            fig.update_layout(
+                title=f"{view_type} - {selected}",
+                height=max(700, len(periods) * 90),
+                xaxis=dict(
+                    tickmode="array",
+                    tickvals=list(range(len(days))),
+                    ticktext=days,
+                    side="top",
+                    range=[-0.5, len(days) - 0.5]
+                ),
+                yaxis=dict(
+                    tickmode="array",
+                    tickvals=list(range(len(periods))),
+                    ticktext=period_labels,
+                    autorange="reversed"
+                ),
+                showlegend=False
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        # DETAILS
+        with st.expander("View Timetable Data"):
+
+            st.dataframe(
+                view_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+        # DOWNLOAD
+        st.download_button(
+            "Download Timetable CSV",
+            data=view_df.to_csv(index=False).encode("utf-8"),
+            file_name=f"{view_type}_{selected}.csv",
+            mime="text/csv",
+            key=f"download_{view_type}"
+        )
+
+    else:
+
+        st.warning("No timetable data available for this selection.")
+
+else:
+
+st.info(
+    "Generate the timetable using CP-SAT first. "
+    "The timetable viewer will remain available after generation."
+)
 
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
