@@ -5469,6 +5469,47 @@ elif page == "8. Generate Timetable":
                 source_data = GRAPH_VERTICES[source]
                 target_data = GRAPH_VERTICES[target]
                 
+                source_domain = SCHEDULING_DOMAINS.get(
+                    source,
+                    []
+                )
+                
+                target_domain = SCHEDULING_DOMAINS.get(
+                    target,
+                    []
+                )
+                
+                source_slots = {
+                    (
+                        str(option["Day"]),
+                        str(option["Start_Time"]),
+                        str(option["End_Time"])
+                    )
+                    for option in source_domain
+                }
+                
+                target_slots = {
+                    (
+                        str(option["Day"]),
+                        str(option["Start_Time"]),
+                        str(option["End_Time"])
+                    )
+                    for option in target_domain
+                }
+                
+                common_slots = sorted(
+                    source_slots.intersection(target_slots)
+                )
+                
+                common_slots_text = (
+                    "<br>".join(
+                        f"{day}: {start} - {end}"
+                        for day, start, end in common_slots[:10]
+                    )
+                    if common_slots
+                    else "No common candidate time slots"
+                )
+                
                 edge_hover.append(
                 
                     f"<b>⚠ FIXED TIMETABLE CONFLICT</b><br><br>"
@@ -5481,16 +5522,16 @@ elif page == "8. Generate Timetable":
                     f"<b>Subject:</b> {target_data['Course_Title']}<br>"
                     f"<b>Course Code:</b> {target_data['Course_Code']}<br><br>"
                 
-                    f"<b>Conflict Reason:</b> Same student section<br>"
                     f"<b>Section:</b> {edge['Section_ID']}<br>"
+                    f"<b>Conflict:</b> Same section cannot attend "
+                    f"both sessions simultaneously.<br><br>"
                 
-                    f"<b>Constraint Violated:</b> "
-                    f"These sessions cannot be scheduled "
-                    f"at the same time.<br><br>"
+                    f"<b>Common Candidate Time Slots:</b><br>"
+                    f"{common_slots_text}<br><br>"
                 
-                    f"<b>Click the edge to view full conflict details</b>"
+                    f"<i>These are candidate slots, not final assigned times.</i>"
                 )
-                            
+                                            
             
             # ------------------------------------------------------------
             # 10. PREPARE NODE DATA
@@ -6019,102 +6060,12 @@ elif page == "8. Generate Timetable":
             st.subheader(
                 "Conditional Faculty / Resource Relationships"
             )
-            
+
             if CONDITIONAL_CONFLICTS:
             
                 CONDITIONAL_DF = pd.DataFrame(
                     CONDITIONAL_CONFLICTS
                 )
-            
-                # -------------------------------------------------
-                # ADD CANDIDATE TIME SLOTS FOR EACH SESSION
-                # -------------------------------------------------
-            
-                def get_candidate_times(session_id):
-            
-                    domain = SCHEDULING_DOMAINS.get(
-                        str(session_id),
-                        []
-                    )
-            
-                    slots = sorted({
-            
-                        (
-                            str(option["Day"]),
-                            str(option["Start_Time"]),
-                            str(option["End_Time"])
-                        )
-            
-                        for option in domain
-            
-                    })
-            
-                    return slots
-            
-            
-                def format_slots(slots):
-            
-                    return "\n".join(
-            
-                        f"{day}: {start} - {end}"
-            
-                        for day, start, end in slots
-            
-                    )
-            
-            
-                CONDITIONAL_DF["Session_A_Time_Slots"] = (
-                    CONDITIONAL_DF["Session_A"].apply(
-                        lambda sid: format_slots(
-                            get_candidate_times(sid)
-                        )
-                    )
-                )
-            
-            
-                CONDITIONAL_DF["Session_B_Time_Slots"] = (
-                    CONDITIONAL_DF["Session_B"].apply(
-                        lambda sid: format_slots(
-                            get_candidate_times(sid)
-                        )
-                    )
-                )
-            
-            
-                # -------------------------------------------------
-                # COMMON POSSIBLE TIME SLOTS
-                # -------------------------------------------------
-            
-                def get_common_slots(session_a, session_b):
-            
-                    slots_a = set(
-                        get_candidate_times(session_a)
-                    )
-            
-                    slots_b = set(
-                        get_candidate_times(session_b)
-                    )
-            
-                    common = sorted(
-                        slots_a.intersection(slots_b)
-                    )
-            
-                    return format_slots(common)
-            
-            
-                CONDITIONAL_DF["Common_Possible_Time_Slots"] = (
-                    CONDITIONAL_DF.apply(
-            
-                        lambda row: get_common_slots(
-                            row["Session_A"],
-                            row["Session_B"]
-                        ),
-            
-                        axis=1
-            
-                    )
-                )
-            
             
                 st.dataframe(
                     CONDITIONAL_DF,
