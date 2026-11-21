@@ -52,6 +52,7 @@ page = st.sidebar.radio(
         "6. Faculty Constraints & HOD Approval",
         "7. Classroom & Laboratory Configuration",
         "8. Generate Timetable"
+        "9. CP-SAT Timetable Solver"
     ]
 )
 
@@ -6147,6 +6148,556 @@ elif page == "8. Generate Timetable":
             )
 
             st.session_state.scheduling_domains_confirmed = False
+
+# =========================================================
+# 9. CP-SAT TIMETABLE SOLVER
+# =========================================================
+
+elif page == "9. CP-SAT Timetable Solver":
+
+    st.header("CP-SAT Timetable Generation")
+
+    st.write(
+        "Generate a feasible timetable using Google OR-Tools CP-SAT."
+    )
+
+    # -----------------------------------------------------
+    # 1. CHECK INPUT DATA
+    # -----------------------------------------------------
+
+    required_state = [
+        "scheduling_sessions",
+        "scheduling_domains",
+        "STATIC_GRAPH_EDGES"
+    ]
+
+    missing_state = [
+        item for item in required_state
+        if item not in st.session_state
+    ]
+
+    if missing_state:
+
+        st.error(
+            "Required scheduling data is missing. "
+            "Complete the scheduling dataset, domains, "
+            "and conflict graph first."
+        )
+
+    else:
+
+        SESSIONS = st.session_state.scheduling_sessions.copy()
+
+        DOMAINS = st.session_state.scheduling_domains
+
+        GRAPH_EDGES = st.session_state.STATIC_GRAPH_EDGES
+
+        # -------------------------------------------------
+        # 2. CHECK EMPTY DOMAINS
+        # -------------------------------------------------
+
+        empty_sessions = [
+            session_id
+            for session_id, domain in DOMAINS.items()
+            if not domain
+        ]
+
+        if empty_sessions:
+
+            st.error(
+                f"{len(empty_sessions)} session(s) have empty domains."
+            )
+
+            st.write(empty_sessions)
+
+        else:
+
+            st.success(
+                f"All {len(DOMAINS)} sessions have candidate assignments."
+            )
+
+        # -------------------------------------------------
+        # 3. GRAPH CONFLICT LOOKUP
+        # -------------------------------------------------
+
+        SECTION_CONFLICT_PAIRS = set()
+
+        for edge in GRAPH_EDGES:
+
+            a = str(edge["Source"])
+            b = str(edge["Target"])
+
+            SECTION_CONFLICT_PAIRS.add(
+                tuple(sorted((a, b)))
+            )
+
+        # -------------------------------------------------
+        # 4. SOLVER BUTTON
+        # -------------------------------------------------
+
+        if st.button(
+            "🚀 Generate Timetable using CP-SAT",
+            type="primary"
+        ):
+
+            if empty_sessions:
+
+                st.error(
+                    "Cannot generate timetable because "
+                    "some sessions have empty domains."
+                )
+
+            else:
+
+                from ortools.sat.python import cp_model
+
+                model = cp_model.CpModel()
+
+                # -------------------------------------------------
+                # 5. CREATE DECISION VARIABLES
+                # -------------------------------------------------
+
+                assignment_vars = {}
+
+                session_ids = list(DOMAINS.keys())
+
+                for session_id in session_ids:
+
+                    assignment_vars[session_id] = []
+
+                    for option_index, option in enumerate(
+                        DOMAINS[session_id]
+                    ):
+
+                        variable = model.NewBoolVar(
+                            f"x_{session_id}_{option_index}"
+                        )
+
+                        assignment_vars[session_id].append(
+                            variable
+                        )
+
+                # -------------------------------------------------
+                # 6. EACH SESSION MUST HAVE EXACTLY ONE ASSIGNMENT
+                # -------------------------------------------------
+
+                for session_id in session_ids:
+
+                    model.Add(
+                        sum(assignment_vars[session_id]) == 1
+                    )
+
+                # -------------------------------------------------
+                # 7. HELPER: PERIOD OVERLAP
+                # -------------------------------------------------
+
+                def option_periods(option):
+
+                    periods = option.get("Periods", [])
+
+                    if periods:
+
+                        return set(
+                            int(p) for p in periods
+                        )
+
+                    return set(
+                        range(
+                            int(option["Start_Period"]),
+                            int(option["End_Period"]) + 1
+                        )
+                    )
+
+                def options_overlap(option_a, option_b):
+
+                    if str(option_a["Day"]) != str(option_b["Day"]):
+                        return False
+
+                    periods_a = option_periods(option_a)
+                    periods_b = option_periods(option_b)
+
+                    return bool(
+                        periods_a.intersection(periods_b)
+                    )
+
+                # -------------------------------------------------
+                # 8. ADD CONFLICT CONSTRAINTS
+                # -------------------------------------------------
+
+                section_constraints = 0
+                faculty_constraints = 0
+                resource_constraints = 0
+
+                for i in range(len(session_ids)):
+
+                    session_a_id = session_ids[i]
+
+                    domain_a = DOMAINS[session_a_id]
+
+                    for j in range(i + 1, len(session_ids)):
+
+                        session_b_id = session_ids[j]
+
+                        domain_b = DOMAINS[session_b_id]
+
+                        pair = tuple(
+                            sorted(
+                                (
+                                    str(session_a_id),
+                                    str(session_b_id)
+                                )
+                            )
+                        )
+
+                        is_section_conflict = (
+                            pair in SECTION_CONFLICT_PAIRS
+                        )
+
+                        # -----------------------------------------
+                        # Compare candidate assignments
+                        # -----------------------------------------
+
+                        for option_a_index, option_a in enumerate(
+                            domain_a
+                        ):
+
+                            variable_a = assignment_vars[
+                                session_a_id
+                            ][option_a_index]
+
+                            for option_b_index, option_b in enumerate(
+                                domain_b
+                            ):
+
+                                variable_b = assignment_vars[
+                                    session_b_id
+                                ][option_b_index]
+
+                                if not options_overlap(
+                                    option_a,
+                                    option_b
+                                ):
+                                    continue
+
+                                # ---------------------------------
+                                # SAME SECTION
+                                # ---------------------------------
+
+                                if is_section_conflict:
+
+                                    model.Add(
+                                        variable_a + variable_b <= 1
+                                    )
+
+                                    section_constraints += 1
+
+                                # ---------------------------------
+                                # SAME FACULTY
+                                # ---------------------------------
+
+                                faculty_a = str(
+                                    option_a["Faculty_ID"]
+                                ).strip()
+
+                                faculty_b = str(
+                                    option_b["Faculty_ID"]
+                                ).strip()
+
+                                if faculty_a == faculty_b:
+
+                                    model.Add(
+                                        variable_a + variable_b <= 1
+                                    )
+
+                                    faculty_constraints += 1
+
+                                # ---------------------------------
+                                # SAME RESOURCE
+                                # ---------------------------------
+
+                                resource_a = str(
+                                    option_a["Resource"]
+                                ).strip()
+
+                                resource_b = str(
+                                    option_b["Resource"]
+                                ).strip()
+
+                                if resource_a == resource_b:
+
+                                    model.Add(
+                                        variable_a + variable_b <= 1
+                                    )
+
+                                    resource_constraints += 1
+
+                # -------------------------------------------------
+                # 9. SOLVE
+                # -------------------------------------------------
+
+                solver = cp_model.CpSolver()
+
+                solver.parameters.max_time_in_seconds = 60
+
+                solver.parameters.num_search_workers = 8
+
+                solver.parameters.log_search_progress = False
+
+                with st.spinner(
+                    "CP-SAT is searching for a feasible timetable..."
+                ):
+
+                    status = solver.Solve(model)
+
+                # -------------------------------------------------
+                # 10. DISPLAY SOLVER STATUS
+                # -------------------------------------------------
+
+                if status in (
+                    cp_model.OPTIMAL,
+                    cp_model.FEASIBLE
+                ):
+
+                    timetable_records = []
+
+                    for session_id in session_ids:
+
+                        selected_option = None
+
+                        for option_index, variable in enumerate(
+                            assignment_vars[session_id]
+                        ):
+
+                            if solver.Value(variable) == 1:
+
+                                selected_option = DOMAINS[
+                                    session_id
+                                ][option_index]
+
+                                break
+
+                        if selected_option is None:
+                            continue
+
+                        session_row = SESSIONS[
+                            SESSIONS["Session_ID"].astype(str)
+                            == str(session_id)
+                        ]
+
+                        if not session_row.empty:
+
+                            session_data = (
+                                session_row.iloc[0].to_dict()
+                            )
+
+                        else:
+
+                            session_data = {}
+
+                        timetable_records.append({
+
+                            "Session_ID": session_id,
+
+                            "Section_ID": session_data.get(
+                                "Section_ID", ""
+                            ),
+
+                            "Programme": session_data.get(
+                                "Programme", ""
+                            ),
+
+                            "Semester": session_data.get(
+                                "Semester", ""
+                            ),
+
+                            "Section": session_data.get(
+                                "Section", ""
+                            ),
+
+                            "Course_Code": session_data.get(
+                                "Course_Code", ""
+                            ),
+
+                            "Course_Title": session_data.get(
+                                "Course_Title", ""
+                            ),
+
+                            "Session_Type": session_data.get(
+                                "Session_Type", ""
+                            ),
+
+                            "Faculty_ID": selected_option[
+                                "Faculty_ID"
+                            ],
+
+                            "Day": selected_option["Day"],
+
+                            "Start_Period": selected_option[
+                                "Start_Period"
+                            ],
+
+                            "End_Period": selected_option[
+                                "End_Period"
+                            ],
+
+                            "Start_Time": selected_option[
+                                "Start_Time"
+                            ],
+
+                            "End_Time": selected_option[
+                                "End_Time"
+                            ],
+
+                            "Periods": selected_option[
+                                "Periods"
+                            ],
+
+                            "Resource": selected_option[
+                                "Resource"
+                            ],
+
+                            "Resource_Type": selected_option[
+                                "Resource_Type"
+                            ]
+
+                        })
+
+                    TIMETABLE_DF = pd.DataFrame(
+                        timetable_records
+                    )
+
+                    # ---------------------------------------------
+                    # SAVE RESULTS
+                    # ---------------------------------------------
+
+                    st.session_state.generated_timetable = (
+                        TIMETABLE_DF
+                    )
+
+                    st.session_state.cpsat_status = (
+                        solver.StatusName(status)
+                    )
+
+                    st.session_state.cpsat_runtime = (
+                        solver.WallTime()
+                    )
+
+                    st.session_state.cpsat_constraints = {
+
+                        "Section Conflict Constraints":
+                            section_constraints,
+
+                        "Faculty Conflict Constraints":
+                            faculty_constraints,
+
+                        "Resource Conflict Constraints":
+                            resource_constraints
+                    }
+
+                    # ---------------------------------------------
+                    # SUCCESS SUMMARY
+                    # ---------------------------------------------
+
+                    st.success(
+                        "Timetable generated successfully!"
+                    )
+
+                    col1, col2, col3, col4 = st.columns(4)
+
+                    col1.metric(
+                        "Solver Status",
+                        solver.StatusName(status)
+                    )
+
+                    col2.metric(
+                        "Sessions Scheduled",
+                        len(TIMETABLE_DF)
+                    )
+
+                    col3.metric(
+                        "Solver Runtime",
+                        f"{solver.WallTime():.2f} seconds"
+                    )
+
+                    col4.metric(
+                        "Total Constraints",
+                        (
+                            section_constraints
+                            + faculty_constraints
+                            + resource_constraints
+                        )
+                    )
+
+                    # ---------------------------------------------
+                    # CONSTRAINT SUMMARY
+                    # ---------------------------------------------
+
+                    st.subheader(
+                        "Constraint Summary"
+                    )
+
+                    st.write(
+                        st.session_state.cpsat_constraints
+                    )
+
+                    # ---------------------------------------------
+                    # TIMETABLE DATA
+                    # ---------------------------------------------
+
+                    st.subheader(
+                        "Generated Timetable Dataset"
+                    )
+
+                    st.dataframe(
+                        TIMETABLE_DF.sort_values(
+                            [
+                                "Day",
+                                "Start_Period",
+                                "Section_ID"
+                            ]
+                        ),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                elif status == cp_model.INFEASIBLE:
+
+                    st.error(
+                        "The timetable is infeasible. "
+                        "No assignment satisfies all hard constraints."
+                    )
+
+                elif status == cp_model.MODEL_INVALID:
+
+                    st.error(
+                        "The CP-SAT model is invalid. "
+                        "Check the generated constraints."
+                    )
+
+                else:
+
+                    st.warning(
+                        f"Solver terminated with status: "
+                        f"{solver.StatusName(status)}"
+                    )
+
+        # -------------------------------------------------
+        # 11. SHOW PREVIOUS SOLUTION
+        # -------------------------------------------------
+
+        if "generated_timetable" in st.session_state:
+
+            st.divider()
+
+            st.subheader(
+                "Previously Generated Timetable"
+            )
+
+            st.dataframe(
+                st.session_state.generated_timetable,
+                use_container_width=True,
+                hide_index=True
+            )
 
 # =========================================================
 # FOOTER
