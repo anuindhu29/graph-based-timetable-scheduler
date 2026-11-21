@@ -6415,9 +6415,9 @@ elif page == "8. Generate Timetable":
             key=f"download_{view_type}"
         )
 
-        else:
-    
-            st.warning("No timetable data available for this selection.")
+            else:
+        
+                st.warning("No timetable data available for this selection.")
 
 else:
 
