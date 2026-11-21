@@ -6285,11 +6285,6 @@ elif page == "8. Generate Timetable":
                     st.session_state.conflict_graph_confirmed = True
                     st.session_state.config["conflict_graph_confirmed"] = True
                     st.success("Conflict graph confirmed. CP-SAT is ready.")
-                        st.dataframe(
-                                view_df,
-                                use_container_width=True,
-                                hide_index=True
-                            )
     
                         # DOWNLOAD
                         st.download_button(
