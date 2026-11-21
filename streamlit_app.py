@@ -5408,58 +5408,14 @@ elif page == "8. Generate Timetable":
             
             
             # ------------------------------------------------------------
-            # 8. LAYOUT — SEPARATE CONNECTED COMPONENTS
+            # 8. GLOBAL CIRCULAR LAYOUT — SINGLE GRAPH
             # ------------------------------------------------------------
             
-            components = sorted(
-                nx.connected_components(G_CONFLICT),
-                key=len,
-                reverse=True
+            positions = nx.circular_layout(
+                G_CONFLICT,
+                scale=10,
+                center=(0, 0)
             )
-            
-            positions = {}
-            
-            component_count = len(components)
-            
-            layout_columns = max(
-                1,
-                math.ceil(math.sqrt(component_count))
-            )
-            
-            for component_index, component in enumerate(components):
-            
-                nodes = sorted(component)
-            
-                row = component_index // layout_columns
-                col = component_index % layout_columns
-            
-                center_x = col * 10.0
-                center_y = -row * 10.0
-            
-                node_count = len(nodes)
-            
-                radius = max(
-                    1.5,
-                    node_count * 0.20
-                )
-            
-                for node_index, node in enumerate(nodes):
-            
-                    angle = (
-                        2 * math.pi * node_index
-                        / max(1, node_count)
-                    )
-            
-                    positions[node] = (
-            
-                        center_x
-                        + radius * math.cos(angle),
-            
-                        center_y
-                        + radius * math.sin(angle)
-            
-                    )
-            
             
             # ------------------------------------------------------------
             # 9. PREPARE GRAPH EDGES
@@ -5673,7 +5629,7 @@ elif page == "8. Generate Timetable":
                     "x": 0.5
                 },
             
-                height=800,
+                height=1100,
             
                 showlegend=True,
             
