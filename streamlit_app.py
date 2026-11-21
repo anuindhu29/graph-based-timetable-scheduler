@@ -5,6 +5,7 @@ from datetime import datetime
 from io import BytesIO
 from docx import Document
 import io
+import re
 
 # =========================================================
 # PAGE CONFIG
@@ -2432,6 +2433,7 @@ elif page == "8. Generate Timetable":
                             file_name="LAB_ELIGIBILITY_MAPPING.csv",
                             mime="text/csv"
                         )
+        
         # =================================================
         # SECTION GENERATION & FIXED CLASSROOM ALLOCATION
         # =================================================
@@ -2712,6 +2714,944 @@ elif page == "8. Generate Timetable":
             st.warning(
                 "Confirm Weekly Course Requirements first."
             )
+                # =================================================
+        # CELL 15: FACULTY ELIGIBILITY & AVAILABILITY
+        # =================================================
+
+        st.divider()
+        st.subheader("Faculty Eligibility & Availability Processing")
+
+        # -------------------------------------------------
+        # 1. VALIDATE INPUTS
+        # -------------------------------------------------
+
+        if not st.session_state.get(
+            "faculty_constraints_confirmed", False
+        ):
+
+            st.error(
+                "Confirm Faculty Constraints & HOD Approval first."
+            )
+
+        else:
+
+            faculty_raw = (
+                st.session_state.uploaded_data["faculty"]["data"]
+                .copy()
+            )
+
+            approvals_df = pd.DataFrame(
+                st.session_state.faculty_approvals
+            )
+
+            constraints_df = pd.DataFrame(
+                st.session_state.faculty_constraints
+            )
+
+            # -------------------------------------------------
+            # 2. SUBJECT NORMALIZATION — NOTEBOOK LOGIC
+            # -------------------------------------------------
+
+            def canonicalize_subject_name(value):
+
+                if pd.isna(value):
+                    return ""
+
+                subject = str(value).strip()
+
+                subject = re.sub(
+                    r"\([^)]*\)",
+                    "",
+                    subject
+                ).strip()
+
+                if "/" in subject:
+
+                    subject = subject.split("/")[-1].strip()
+
+                subject = re.sub(
+                    r"\s+",
+                    " ",
+                    subject
+                ).strip()
+
+                return subject
+
+
+            def normalize_subject_name(value):
+
+                subject = canonicalize_subject_name(value)
+
+                subject = subject.lower()
+
+                subject = re.sub(
+                    r"[^a-z0-9 ]",
+                    "",
+                    subject
+                )
+
+                subject = re.sub(
+                    r"\s+",
+                    " ",
+                    subject
+                ).strip()
+
+                return subject
+
+
+            # -------------------------------------------------
+            # 3. FIND FACULTY COLUMNS
+            # -------------------------------------------------
+
+            def find_column(df, possible_names):
+
+                normalized_columns = {
+                    str(col).strip().lower().replace("_", " "): col
+                    for col in df.columns
+                }
+
+                for name in possible_names:
+
+                    normalized_name = (
+                        name.strip()
+                        .lower()
+                        .replace("_", " ")
+                    )
+
+                    if normalized_name in normalized_columns:
+
+                        return normalized_columns[
+                            normalized_name
+                        ]
+
+                return None
+
+
+            faculty_id_col = find_column(
+                faculty_raw,
+                [
+                    "Faculty ID",
+                    "Faculty_ID",
+                    "ID",
+                    "Employee ID"
+                ]
+            )
+
+            faculty_name_col = find_column(
+                faculty_raw,
+                [
+                    "Faculty Name",
+                    "Faculty_Name",
+                    "Name",
+                    "Faculty"
+                ]
+            )
+
+            designation_col = find_column(
+                faculty_raw,
+                [
+                    "Designation",
+                    "Position",
+                    "Academic Designation"
+                ]
+            )
+
+            subject_col = find_column(
+                faculty_raw,
+                [
+                    "Subject",
+                    "Subjects",
+                    "Subjects Interested",
+                    "Willing Subjects"
+                ]
+            )
+
+
+            required_columns = {
+                "Faculty ID": faculty_id_col,
+                "Faculty Name": faculty_name_col,
+                "Designation": designation_col,
+                "Subject": subject_col
+            }
+
+            missing_columns = [
+                name
+                for name, column in required_columns.items()
+                if column is None
+            ]
+
+            if missing_columns:
+
+                st.error(
+                    "Faculty Excel is missing required columns: "
+                    + ", ".join(missing_columns)
+                )
+
+            else:
+
+                # -------------------------------------------------
+                # 4. CREATE FACULTY MASTER
+                # -------------------------------------------------
+
+                faculty_master = faculty_raw[
+                    [
+                        faculty_id_col,
+                        faculty_name_col,
+                        designation_col
+                    ]
+                ].copy()
+
+                faculty_master.columns = [
+                    "Faculty_ID",
+                    "Faculty_Name",
+                    "Designation"
+                ]
+
+                faculty_master["Faculty_ID"] = (
+                    faculty_master["Faculty_ID"]
+                    .astype(str)
+                    .str.strip()
+                )
+
+                faculty_master["Faculty_Name"] = (
+                    faculty_master["Faculty_Name"]
+                    .astype(str)
+                    .str.strip()
+                )
+
+                faculty_master["Designation"] = (
+                    faculty_master["Designation"]
+                    .astype(str)
+                    .str.strip()
+                )
+
+                faculty_master = faculty_master[
+                    faculty_master["Faculty_Name"] != ""
+                ].drop_duplicates(
+                    subset=["Faculty_ID"]
+                ).reset_index(drop=True)
+
+
+                # -------------------------------------------------
+                # 5. EXTRACT FIVE WILLING SUBJECTS PER FACULTY
+                # -------------------------------------------------
+
+                mapping_records = []
+
+                faculty_subject_errors = []
+
+                for _, faculty_row in faculty_raw.iterrows():
+
+                    faculty_id = str(
+                        faculty_row[faculty_id_col]
+                    ).strip()
+
+                    faculty_name = str(
+                        faculty_row[faculty_name_col]
+                    ).strip()
+
+                    designation = str(
+                        faculty_row[designation_col]
+                    ).strip()
+
+                    subject_text = str(
+                        faculty_row[subject_col]
+                    ).strip()
+
+                    if faculty_name.lower() in [
+                        "",
+                        "nan",
+                        "none"
+                    ]:
+
+                        continue
+
+                    subject_matches = re.findall(
+                        r"\d+\.\s*(.*?)(?=\d+\.\s*|$)",
+                        subject_text,
+                        flags=re.DOTALL
+                    )
+
+                    subjects = [
+                        re.sub(
+                            r"\s+",
+                            " ",
+                            subject
+                        ).strip()
+                        for subject in subject_matches
+                        if subject.strip()
+                    ]
+
+                    if len(subjects) != 5:
+
+                        faculty_subject_errors.append(
+                            f"{faculty_name}: "
+                            f"{len(subjects)} subjects extracted; "
+                            f"exactly 5 are required."
+                        )
+
+                        continue
+
+                    normalized_subjects = [
+                        normalize_subject_name(subject)
+                        for subject in subjects
+                    ]
+
+                    if len(set(normalized_subjects)) != 5:
+
+                        faculty_subject_errors.append(
+                            f"{faculty_name}: duplicate subjects found."
+                        )
+
+                        continue
+
+                    for subject in subjects:
+
+                        canonical_subject = (
+                            canonicalize_subject_name(subject)
+                        )
+
+                        mapping_records.append({
+
+                            "Faculty_ID": faculty_id,
+
+                            "Faculty_Name": faculty_name,
+
+                            "Designation": designation,
+
+                            "Original_Subject": subject,
+
+                            "Subject": canonical_subject,
+
+                            "Normalized_Subject": (
+                                normalize_subject_name(
+                                    canonical_subject
+                                )
+                            )
+
+                        })
+
+
+                FACULTY_SUBJECT_MAPPING = pd.DataFrame(
+                    mapping_records
+                )
+
+
+                # -------------------------------------------------
+                # 6. APPROVAL LOOKUP
+                # -------------------------------------------------
+
+                approvals_lookup = {}
+
+                for _, approval in approvals_df.iterrows():
+
+                    faculty_id = str(
+                        approval["Faculty_ID"]
+                    ).strip()
+
+                    approvals_lookup[faculty_id] = {
+
+                        "BTech_Approved": bool(
+                            approval["BTech_Approved"]
+                        ),
+
+                        "BTech_Years": approval.get(
+                            "BTech_Years",
+                            []
+                        ),
+
+                        "MTech_Approved": bool(
+                            approval["MTech_Approved"]
+                        ),
+
+                        "MTech_Years": approval.get(
+                            "MTech_Years",
+                            []
+                        ),
+
+                        "Approved_By": approval.get(
+                            "Approved_By",
+                            ""
+                        ),
+
+                        "Remarks": approval.get(
+                            "Remarks",
+                            ""
+                        )
+
+                    }
+
+
+                # -------------------------------------------------
+                # 7. BUILD FINAL FACULTY ELIGIBILITY
+                # -------------------------------------------------
+
+                eligibility_records = []
+
+                for _, mapping_row in (
+                    FACULTY_SUBJECT_MAPPING.iterrows()
+                ):
+
+                    faculty_id = str(
+                        mapping_row["Faculty_ID"]
+                    ).strip()
+
+                    approval = approvals_lookup.get(
+                        faculty_id,
+                        {}
+                    )
+
+                    faculty_match = faculty_master[
+                        faculty_master["Faculty_ID"]
+                        == faculty_id
+                    ]
+
+                    if faculty_match.empty:
+                        continue
+
+                    faculty_info = faculty_match.iloc[0]
+
+                    eligibility_records.append({
+
+                        "Faculty_ID": faculty_id,
+
+                        "Faculty_Name": (
+                            faculty_info["Faculty_Name"]
+                        ),
+
+                        "Designation": (
+                            faculty_info["Designation"]
+                        ),
+
+                        "Subject": mapping_row["Subject"],
+
+                        "Normalized_Subject": (
+                            mapping_row["Normalized_Subject"]
+                        ),
+
+                        "BTech_Eligible": approval.get(
+                            "BTech_Approved",
+                            False
+                        ),
+
+                        "BTech_Years": approval.get(
+                            "BTech_Years",
+                            []
+                        ),
+
+                        "MTech_Eligible": approval.get(
+                            "MTech_Approved",
+                            False
+                        ),
+
+                        "MTech_Years": approval.get(
+                            "MTech_Years",
+                            []
+                        ),
+
+                        "Approved_By": approval.get(
+                            "Approved_By",
+                            ""
+                        ),
+
+                        "Approval_Remarks": approval.get(
+                            "Remarks",
+                            ""
+                        )
+
+                    })
+
+
+                FACULTY_ELIGIBILITY = pd.DataFrame(
+                    eligibility_records
+                )
+
+
+                # -------------------------------------------------
+                # 8. SEMESTER TO YEAR CONVERSION
+                # -------------------------------------------------
+
+                def semester_to_year(semester):
+
+                    roman_map = {
+                        "I": 1,
+                        "II": 2,
+                        "III": 3,
+                        "IV": 4,
+                        "V": 5,
+                        "VI": 6,
+                        "VII": 7,
+                        "VIII": 8
+                    }
+
+                    value = str(
+                        semester
+                    ).strip().upper()
+
+                    if value in roman_map:
+
+                        semester_number = roman_map[value]
+
+                    else:
+
+                        try:
+
+                            semester_number = int(
+                                float(value)
+                            )
+
+                        except (ValueError, TypeError):
+
+                            return None
+
+                    if semester_number < 1:
+                        return None
+
+                    year_number = (
+                        semester_number + 1
+                    ) // 2
+
+                    return f"Year {year_number}"
+
+
+                # -------------------------------------------------
+                # 9. ELIGIBLE FACULTY FUNCTION
+                # -------------------------------------------------
+
+                def get_eligible_faculty_for_subject(
+                    normalized_subject,
+                    programme,
+                    semester=None
+                ):
+
+                    programme_type = (
+                        str(programme)
+                        .lower()
+                        .replace(" ", "")
+                        .replace(".", "")
+                    )
+
+                    subject = (
+                        str(normalized_subject)
+                        .strip()
+                        .casefold()
+                    )
+
+                    year = (
+                        semester_to_year(semester)
+                        if semester is not None
+                        else None
+                    )
+
+                    matching = FACULTY_ELIGIBILITY[
+                        FACULTY_ELIGIBILITY[
+                            "Normalized_Subject"
+                        ]
+                        .astype(str)
+                        .str.strip()
+                        .str.casefold()
+                        == subject
+                    ]
+
+                    eligible_ids = []
+
+                    for _, faculty in matching.iterrows():
+
+                        if "btech" in programme_type:
+
+                            approved = faculty[
+                                "BTech_Eligible"
+                            ]
+
+                            approved_years = faculty[
+                                "BTech_Years"
+                            ]
+
+                        elif "mtech" in programme_type:
+
+                            approved = faculty[
+                                "MTech_Eligible"
+                            ]
+
+                            approved_years = faculty[
+                                "MTech_Years"
+                            ]
+
+                        else:
+
+                            continue
+
+                        if not approved:
+                            continue
+
+                        if (
+                            year is not None
+                            and year not in approved_years
+                        ):
+
+                            continue
+
+                        eligible_ids.append(
+                            faculty["Faculty_ID"]
+                        )
+
+                    return eligible_ids
+
+
+                # -------------------------------------------------
+                # 10. BUILD VALID PERIODS
+                # -------------------------------------------------
+
+                calendar = st.session_state.config.get(
+                    "calendar",
+                    {}
+                )
+
+                working_days = calendar.get(
+                    "working_days",
+                    [
+                        "Monday",
+                        "Tuesday",
+                        "Wednesday",
+                        "Thursday",
+                        "Friday"
+                    ]
+                )
+
+                college_start = calendar.get(
+                    "college_start",
+                    "08:30"
+                )
+
+                college_end = calendar.get(
+                    "college_end",
+                    "17:00"
+                )
+
+                period_duration = int(
+                    calendar.get(
+                        "period_duration",
+                        50
+                    )
+                )
+
+                morning_break = calendar.get(
+                    "morning_break",
+                    {"start": "10:10", "end": "10:30"}
+                )
+
+                lunch = calendar.get(
+                    "lunch",
+                    {"start": "12:10", "end": "13:30"}
+                )
+
+                afternoon_break = calendar.get(
+                    "afternoon_break",
+                    {"start": "14:20", "end": "14:30"}
+                )
+
+
+                def time_to_minutes(value):
+
+                    hour, minute = map(
+                        int,
+                        str(value).split(":")[:2]
+                    )
+
+                    return hour * 60 + minute
+
+
+                def minutes_to_time(value):
+
+                    return (
+                        f"{value // 60:02d}:"
+                        f"{value % 60:02d}"
+                    )
+
+
+                breaks = [
+                    (
+                        time_to_minutes(
+                            morning_break["start"]
+                        ),
+                        time_to_minutes(
+                            morning_break["end"]
+                        )
+                    ),
+
+                    (
+                        time_to_minutes(
+                            lunch["start"]
+                        ),
+                        time_to_minutes(
+                            lunch["end"]
+                        )
+                    ),
+
+                    (
+                        time_to_minutes(
+                            afternoon_break["start"]
+                        ),
+                        time_to_minutes(
+                            afternoon_break["end"]
+                        )
+                    )
+                ]
+
+
+                VALID_PERIODS = []
+
+                start_minutes = time_to_minutes(
+                    college_start
+                )
+
+                end_minutes = time_to_minutes(
+                    college_end
+                )
+
+                for day in working_days:
+
+                    current = start_minutes
+
+                    period_number = 1
+
+                    while (
+                        current + period_duration
+                        <= end_minutes
+                    ):
+
+                        period_end = (
+                            current + period_duration
+                        )
+
+                        overlapping_break = None
+
+                        for break_start, break_end in breaks:
+
+                            if (
+                                current < break_end
+                                and period_end > break_start
+                            ):
+
+                                overlapping_break = break_end
+
+                                break
+
+                        if overlapping_break is not None:
+
+                            current = overlapping_break
+
+                            continue
+
+                        VALID_PERIODS.append({
+
+                            "Day": day,
+
+                            "Period": period_number,
+
+                            "Start_Time": minutes_to_time(
+                                current
+                            ),
+
+                            "End_Time": minutes_to_time(
+                                period_end
+                            )
+
+                        })
+
+                        current += period_duration
+
+                        period_number += 1
+
+
+                # -------------------------------------------------
+                # 11. BUILD FACULTY AVAILABILITY
+                # -------------------------------------------------
+
+                constraints_lookup = {}
+
+                for _, constraint in (
+                    constraints_df.iterrows()
+                ):
+
+                    faculty_id = str(
+                        constraint["Faculty_ID"]
+                    ).strip()
+
+                    constraints_lookup[faculty_id] = {
+
+                        "Unavailable_Days": (
+                            constraint.get(
+                                "Unavailable_Days",
+                                []
+                            )
+                        ),
+
+                        "Unavailable_Slots": (
+                            constraint.get(
+                                "Unavailable_Slots",
+                                []
+                            )
+                        )
+
+                    }
+
+
+                availability_records = []
+
+                for _, faculty in faculty_master.iterrows():
+
+                    faculty_id = str(
+                        faculty["Faculty_ID"]
+                    ).strip()
+
+                    constraint = constraints_lookup.get(
+                        faculty_id,
+                        {
+                            "Unavailable_Days": [],
+                            "Unavailable_Slots": []
+                        }
+                    )
+
+                    unavailable_days = set(
+                        str(day)
+                        for day in constraint[
+                            "Unavailable_Days"
+                        ]
+                    )
+
+                    unavailable_slots = set(
+                        str(slot)
+                        for slot in constraint[
+                            "Unavailable_Slots"
+                        ]
+                    )
+
+                    for period in VALID_PERIODS:
+
+                        day = period["Day"]
+
+                        start_time = period["Start_Time"]
+
+                        end_time = period["End_Time"]
+
+                        slot_key = (
+                            f"{day}|{start_time}|{end_time}"
+                        )
+
+                        is_available = (
+                            day not in unavailable_days
+                            and slot_key not in unavailable_slots
+                        )
+
+                        availability_records.append({
+
+                            "Faculty_ID": faculty_id,
+
+                            "Faculty_Name": (
+                                faculty["Faculty_Name"]
+                            ),
+
+                            "Day": day,
+
+                            "Period": period["Period"],
+
+                            "Start_Time": start_time,
+
+                            "End_Time": end_time,
+
+                            "Available": is_available
+
+                        })
+
+
+                FACULTY_AVAILABILITY = pd.DataFrame(
+                    availability_records
+                )
+
+
+                # -------------------------------------------------
+                # 12. SAVE TO SESSION STATE
+                # -------------------------------------------------
+
+                st.session_state.faculty_master = (
+                    faculty_master.copy()
+                )
+
+                st.session_state.faculty_subject_mapping = (
+                    FACULTY_SUBJECT_MAPPING.copy()
+                )
+
+                st.session_state.faculty_eligibility = (
+                    FACULTY_ELIGIBILITY.copy()
+                )
+
+                st.session_state.faculty_availability = (
+                    FACULTY_AVAILABILITY.copy()
+                )
+
+                st.session_state.valid_periods = (
+                    VALID_PERIODS.copy()
+                )
+
+                st.session_state.faculty_configuration_confirmed = True
+
+
+                # -------------------------------------------------
+                # 13. DISPLAY SUMMARY
+                # -------------------------------------------------
+
+                st.success(
+                    "Faculty eligibility and availability "
+                    "processing completed."
+                )
+
+                col1, col2, col3 = st.columns(3)
+
+                col1.metric(
+                    "Faculty",
+                    len(faculty_master)
+                )
+
+                col2.metric(
+                    "Faculty–Subject Combinations",
+                    len(FACULTY_SUBJECT_MAPPING)
+                )
+
+                col3.metric(
+                    "Availability Records",
+                    len(FACULTY_AVAILABILITY)
+                )
+
+                st.subheader(
+                    "Faculty Subject Eligibility"
+                )
+
+                st.dataframe(
+                    FACULTY_ELIGIBILITY,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                st.subheader(
+                    "Faculty Availability"
+                )
+
+                st.dataframe(
+                    FACULTY_AVAILABILITY.head(20),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                if faculty_subject_errors:
+
+                    st.warning(
+                        "Faculty subject validation warnings:"
+                    )
+
+                    for error in faculty_subject_errors:
+
+                        st.write("⚠️", error)
         # =================================================
         # SCHEDULING SESSION GENERATION
         # =================================================
