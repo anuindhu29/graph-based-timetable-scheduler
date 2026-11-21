@@ -6605,72 +6605,311 @@ elif page == "9. CP-SAT Timetable Solver":
                     # CONSTRAINT SUMMARY
                     # ---------------------------------------------
 
-                    st.subheader(
-                        "Constraint Summary"
+                    # -------------------------------------------------
+                    # 11. SOLVER STATUS
+                    # -------------------------------------------------
+                    
+                    st.subheader("Solver Result")
+                    
+                    st.success(
+                        f"✅ Timetable generated successfully — "
+                        f"Solver Status: {solver.StatusName(status)}"
                     )
-
-                    st.write(
-                        st.session_state.cpsat_constraints
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    col1.metric(
+                        "Sessions Scheduled",
+                        len(TIMETABLE_DF)
                     )
-
-                    # ---------------------------------------------
-                    # TIMETABLE DATA
-                    # ---------------------------------------------
-
-                    st.subheader(
-                        "Generated Timetable Dataset"
+                    
+                    col2.metric(
+                        "Solver Runtime",
+                        f"{solver.WallTime():.2f} seconds"
                     )
-
-                    st.dataframe(
-                        TIMETABLE_DF.sort_values(
-                            [
-                                "Day",
-                                "Start_Period",
-                                "Section_ID"
-                            ]
+                    
+                    col3.metric(
+                        "Conflict Graph Edges",
+                        len(GRAPH_EDGES)
+                    )
+                    
+                    # -------------------------------------------------
+                    # 12. CONSTRAINT STATISTICS
+                    # -------------------------------------------------
+                    
+                    st.subheader("CP-SAT Constraint Statistics")
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    col1.metric(
+                        "Section Constraints",
+                        f"{section_constraints:,}"
+                    )
+                    
+                    col2.metric(
+                        "Faculty Constraints",
+                        f"{faculty_constraints:,}"
+                    )
+                    
+                    col3.metric(
+                        "Resource Constraints",
+                        f"{resource_constraints:,}"
+                    )
+                    
+                    col4.metric(
+                        "Total Constraints",
+                        f"{section_constraints + faculty_constraints + resource_constraints:,}"
+                    )
+                    
+                    st.caption(
+                        "These represent restrictions between candidate assignment "
+                        "variables in the CP-SAT model. They are not the number of "
+                        "edges in the conflict graph. A single session-level conflict "
+                        "can generate many assignment-level constraints."
+                    )
+                    
+                    # -------------------------------------------------
+                    # 13. GRAPHICAL SECTION-WISE TIMETABLE
+                    # -------------------------------------------------
+                    
+                    st.header("Graphical Timetable")
+                    
+                    # Retrieve valid periods
+                    VALID_PERIODS = st.session_state.valid_periods
+                    
+                    # Unique period numbers
+                    period_numbers = sorted(
+                        set(int(p["Period"]) for p in VALID_PERIODS)
+                    )
+                    
+                    period_info = {}
+                    
+                    for p in VALID_PERIODS:
+                    
+                        period_info[int(p["Period"])] = {
+                            "Start": p["Start_Time"],
+                            "End": p["End_Time"]
+                        }
+                    
+                    period_labels = [
+                        (
+                            f"P{period}: "
+                            f"{period_info[period]['Start']} - "
+                            f"{period_info[period]['End']}"
+                        )
+                        for period in period_numbers
+                    ]
+                    
+                    days = [
+                        "Monday",
+                        "Tuesday",
+                        "Wednesday",
+                        "Thursday",
+                        "Friday"
+                    ]
+                    
+                    # Section selection
+                    sections = sorted(
+                        TIMETABLE_DF["Section_ID"].astype(str).unique()
+                    )
+                    
+                    selected_section = st.selectbox(
+                        "Select Section",
+                        sections,
+                        key="generated_section_view"
+                    )
+                    
+                    section_df = TIMETABLE_DF[
+                        TIMETABLE_DF["Section_ID"].astype(str)
+                        == selected_section
+                    ].copy()
+                    
+                    # -------------------------------------------------
+                    # BUILD PLOT
+                    # -------------------------------------------------
+                    
+                    fig = go.Figure()
+                    
+                    # Background grid
+                    for day_index, day in enumerate(days):
+                    
+                        for period_index, period in enumerate(period_numbers):
+                    
+                            fig.add_shape(
+                                type="rect",
+                                x0=day_index - 0.5,
+                                x1=day_index + 0.5,
+                                y0=period_index - 0.5,
+                                y1=period_index + 0.5,
+                                line=dict(
+                                    color="lightgrey",
+                                    width=1
+                                ),
+                                fillcolor="white",
+                                layer="below"
+                            )
+                    
+                    # -------------------------------------------------
+                    # ADD SCHEDULED SESSIONS
+                    # -------------------------------------------------
+                    
+                    for _, row in section_df.iterrows():
+                    
+                        day = str(row["Day"])
+                    
+                        if day not in days:
+                            continue
+                    
+                        day_index = days.index(day)
+                    
+                        start_period = int(row["Start_Period"])
+                        end_period = int(row["End_Period"])
+                    
+                        if start_period not in period_numbers:
+                            continue
+                    
+                        start_index = period_numbers.index(start_period)
+                    
+                        if end_period in period_numbers:
+                    
+                            end_index = period_numbers.index(end_period)
+                    
+                        else:
+                    
+                            end_index = start_index
+                    
+                        session_type = str(row["Session_Type"])
+                    
+                        if session_type == "Laboratory":
+                    
+                            fill_color = "rgba(230,140,50,0.75)"
+                    
+                        else:
+                    
+                            fill_color = "rgba(55,130,200,0.75)"
+                    
+                        # Rectangle for the scheduled session
+                        fig.add_shape(
+                    
+                            type="rect",
+                    
+                            x0=day_index - 0.43,
+                            x1=day_index + 0.43,
+                    
+                            y0=start_index - 0.43,
+                            y1=end_index + 0.43,
+                    
+                            fillcolor=fill_color,
+                    
+                            line=dict(
+                                color="black",
+                                width=1
+                            )
+                        )
+                    
+                        # Session text
+                        label = (
+                            f"{row['Course_Code']}<br>"
+                            f"{row['Course_Title']}<br>"
+                            f"{row['Faculty_ID']}<br>"
+                            f"{row['Resource']}"
+                        )
+                    
+                        fig.add_annotation(
+                    
+                            x=day_index,
+                            y=(start_index + end_index) / 2,
+                    
+                            text=label,
+                    
+                            showarrow=False,
+                    
+                            font=dict(
+                                size=10,
+                                color="black"
+                            ),
+                    
+                            align="center"
+                        )
+                    
+                    # -------------------------------------------------
+                    # AXES
+                    # -------------------------------------------------
+                    
+                    fig.update_layout(
+                    
+                        title=f"Timetable — {selected_section}",
+                    
+                        height=max(
+                            700,
+                            len(period_numbers) * 90
                         ),
-                        use_container_width=True,
-                        hide_index=True
+                    
+                        xaxis=dict(
+                    
+                            tickmode="array",
+                    
+                            tickvals=list(range(len(days))),
+                    
+                            ticktext=days,
+                    
+                            range=[
+                                -0.5,
+                                len(days) - 0.5
+                            ],
+                    
+                            side="top",
+                    
+                            showgrid=False
+                        ),
+                    
+                        yaxis=dict(
+                    
+                            tickmode="array",
+                    
+                            tickvals=list(range(len(period_numbers))),
+                    
+                            ticktext=period_labels,
+                    
+                            autorange="reversed",
+                    
+                            showgrid=False
+                        ),
+                    
+                        showlegend=False,
+                    
+                        margin=dict(
+                            l=150,
+                            r=30,
+                            t=100,
+                            b=30
+                        )
                     )
-
-                elif status == cp_model.INFEASIBLE:
-
-                    st.error(
-                        "The timetable is infeasible. "
-                        "No assignment satisfies all hard constraints."
+                    
+                    st.plotly_chart(
+                        fig,
+                        use_container_width=True
                     )
-
-                elif status == cp_model.MODEL_INVALID:
-
-                    st.error(
-                        "The CP-SAT model is invalid. "
-                        "Check the generated constraints."
-                    )
-
-                else:
-
-                    st.warning(
-                        f"Solver terminated with status: "
-                        f"{solver.StatusName(status)}"
-                    )
-
-        # -------------------------------------------------
-        # 11. SHOW PREVIOUS SOLUTION
-        # -------------------------------------------------
-
-        if "generated_timetable" in st.session_state:
-
-            st.divider()
-
-            st.subheader(
-                "Previously Generated Timetable"
-            )
-
-            st.dataframe(
-                st.session_state.generated_timetable,
-                use_container_width=True,
-                hide_index=True
-            )
+                    
+                    # -------------------------------------------------
+                    # 14. RAW DATA EXPANDER
+                    # -------------------------------------------------
+                    
+                    with st.expander(
+                        "View Generated Timetable Data"
+                    ):
+                    
+                        st.dataframe(
+                            TIMETABLE_DF.sort_values(
+                                [
+                                    "Section_ID",
+                                    "Day",
+                                    "Start_Period"
+                                ]
+                            ),
+                            use_container_width=True,
+                            hide_index=True
+                        )
 
 # =========================================================
 # FOOTER
