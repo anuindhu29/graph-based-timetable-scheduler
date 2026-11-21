@@ -1606,6 +1606,35 @@ elif page == "8. Generate Timetable":
             "✅ Configuration and uploaded datasets are ready."
         )
 
+        # =============================================
+        # SCHEDULING WORKFLOW START SCREEN
+        # =============================================
+
+        if not st.session_state.get(
+            "scheduling_workflow_started", False
+        ):
+
+            st.divider()
+
+            st.title("Timetable Scheduling Workflow")
+
+            st.info(
+                "Your configurations and datasets are ready. "
+                "Click below to begin the timetable generation workflow."
+            )
+
+            if st.button(
+                "🚀 Start New Scheduling Process",
+                type="primary",
+                use_container_width=True
+            ):
+
+                st.session_state.scheduling_workflow_started = True
+
+                st.rerun()
+
+            st.stop()
+
         st.subheader("Dataset Summary")
 
         uploaded_data = st.session_state.uploaded_data
