@@ -1641,34 +1641,7 @@ elif page == "8. Generate Timetable":
 
             st.stop()
 
-        # =============================================
-        # WORKFLOW STATUS
-        # =============================================
-
-        if not st.session_state.get(
-            "scheduling_dataset_confirmed", False
-        ):
-
-            st.markdown("### Stage 1 of 7 — Session Generation")
-
-            st.progress(1 / 7)
-
-            st.caption(
-                "Generate, review, and confirm the scheduling dataset."
-            )
-
-        else:
-
-            st.markdown("### Stage 2 of 7 — Scheduling Domains")
-
-            st.progress(2 / 7)
-
-            st.caption(
-                "Scheduling dataset confirmed. Generating valid assignment domains."
-            )
-
-        st.divider()
-
+        
         st.subheader("Dataset Summary")
 
         uploaded_data = st.session_state.uploaded_data
