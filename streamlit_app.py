@@ -4359,7 +4359,7 @@ elif page == "8. Generate Timetable":
                     NO_CLASSROOM_SESSIONS = (
                         SCHEDULING_SESSIONS[
                             (
-                                SCHEDULING_SESS[
+                                SCHEDULING_SESSIONS[
                                     "Session_Type"
                                 ] == "Theory"
                             )
