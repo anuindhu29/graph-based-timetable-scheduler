@@ -4675,7 +4675,7 @@ elif page == "8. Generate Timetable":
                 day = str(period["Day"])
 
                 periods_by_day.setdefault(day, []).append(
-                    period.to_dict()
+                    period
                 )
 
             for day in periods_by_day:
