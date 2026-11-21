@@ -4745,24 +4745,6 @@ elif page == "8. Generate Timetable":
                         file_name="SCHEDULING_SESSIONS.csv",
                         mime="text/csv"
                     )
-
-                     # -----------------------------------------
-                    # CONTINUE TO DOMAINS
-                    # -----------------------------------------
-
-                    if st.session_state.get(
-                        "scheduling_dataset_confirmed", False
-                    ):
-
-                        if st.button(
-                            "➡️ Continue to Scheduling Domains",
-                            type="primary",
-                            use_container_width=True
-                        ):
-
-                            st.session_state.workflow_stage = 1
-
-                            st.rerun()
         
         # =========================================================
         # CELL 20: SCHEDULING VARIABLES & DOMAIN GENERATION
