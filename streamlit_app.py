@@ -64,6 +64,7 @@ page = st.sidebar.radio(
         "9. CP-SAT Timetable Solver",
         "10. View Generated Timetable"
     ]
+    key="main_navigation"
 )
 
 # =========================================================
@@ -1655,7 +1656,7 @@ elif page == "7. Classroom & Laboratory Configuration":
                     mime="text/csv"
                 )
 # =========================================================
-# 7. GENERATE TIMETABLE
+# 8. GENERATE TIMETABLE
 # =========================================================
 elif page == "8. Generate Timetable":
 
@@ -3808,7 +3809,7 @@ elif page == "8. Generate Timetable":
                     for error in faculty_subject_errors:
 
                         st.write("⚠️", error)
-                        # =================================================
+         # =================================================
         # CELL 19: TEACHING SESSION GENERATION
         # =================================================
 
@@ -6257,59 +6258,59 @@ elif page == "8. Generate Timetable":
                 
                 st.divider()
                 
-                # ------------------------------------------------------------
-                # 16. CONFIRM CONFLICT GRAPH
-                # ------------------------------------------------------------
-                
-                if st.button(
-                    "Confirm Conflict Graph",
-                    type="primary",
-                    use_container_width=True
+            # ------------------------------------------------------------
+            # 16. CONFIRM CONFLICT GRAPH
+            # ------------------------------------------------------------
+            
+            if st.button(
+                "Confirm Conflict Graph",
+                type="primary",
+                use_container_width=True
+            ):
+            
+                if not st.session_state.get(
+                    "scheduling_domains_confirmed", False
                 ):
-                
-                    if not st.session_state.get(
-                        "scheduling_domains_confirmed", False
-                    ):
-                
-                        st.error(
-                            "Confirm candidate domains before confirming the conflict graph."
-                        )
-                
-                        st.session_state.conflict_graph_confirmed = False
-                
-                        st.session_state.config[
-                            "conflict_graph_confirmed"
-                        ] = False
-                
-                    else:
-                
-                        st.session_state.conflict_graph_confirmed = True
-                
-                        st.session_state.config[
-                            "conflict_graph_confirmed"
-                        ] = True
-                
-                        st.success(
-                            "Conflict graph confirmed. CP-SAT is ready."
-                        )
-                
-                # ------------------------------------------------------------
-                # 17. CP-SAT READY STATUS
-                # ------------------------------------------------------------
-                
-                if st.session_state.get(
-                    "conflict_graph_confirmed", False
-                ):
-                
-                    st.success(
-                        "Conflict graph is confirmed. You can now proceed to CP-SAT."
+            
+                    st.error(
+                        "Confirm candidate domains before confirming the conflict graph."
                     )
-                
+            
+                    st.session_state.conflict_graph_confirmed = False
+            
+                    st.session_state.config[
+                        "conflict_graph_confirmed"
+                    ] = False
+            
                 else:
-                
-                    st.info(
-                        "Confirm the conflict graph before proceeding to CP-SAT."
+            
+                    st.session_state.conflict_graph_confirmed = True
+            
+                    st.session_state.config[
+                        "conflict_graph_confirmed"
+                    ] = True
+            
+                    st.success(
+                        "Conflict graph confirmed. CP-SAT is ready."
                     )
+            
+            # ------------------------------------------------------------
+            # 17. CP-SAT READY STATUS
+            # ------------------------------------------------------------
+            
+            if st.session_state.get(
+                "conflict_graph_confirmed", False
+            ):
+            
+                st.success(
+                    "Conflict graph is confirmed. You can now proceed to CP-SAT."
+                )
+            
+            else:
+            
+                st.info(
+                    "Confirm the conflict graph before proceeding to CP-SAT."
+                )
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
 # =========================================================
