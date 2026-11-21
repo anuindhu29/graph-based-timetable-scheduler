@@ -6231,85 +6231,85 @@ elif page == "8. Generate Timetable":
                     "No conditional relationships were detected."
                 )
             
-            # ------------------------------------------------------------
-            # 15. DOWNLOAD GRAPH DATA
-            # ------------------------------------------------------------
-            
-            STATIC_EDGE_DF = pd.DataFrame(
-                STATIC_GRAPH_EDGES
-            )
-            
-            NODE_MAPPING_DF = pd.DataFrame(
-                list(GRAPH_VERTICES.values())
-            )
-            
-            st.download_button(
-            
-                "Download Fixed Conflict Edges",
-            
-                data=STATIC_EDGE_DF.to_csv(
-                    index=False
-                ).encode("utf-8"),
-            
-                file_name="STATIC_CONFLICT_EDGES.csv",
-            
-                mime="text/csv"
-            
-            )
-            
-            
-            st.download_button(
-            
-                "Download Node Mapping",
-            
-                data=NODE_MAPPING_DF.to_csv(
-                    index=False
-                ).encode("utf-8"),
-            
-                file_name="GRAPH_NODE_MAPPING.csv",
-            
-                mime="text/csv"
-            
-            )
-
-            st.divider()
-            if st.button(
-                "Confirm Conflict Graph",
-                type="primary",
-                use_container_width=True
-            ):
-                if not st.session_state.get("scheduling_domains_confirmed", False):
-                    st.error("Confirm candidate domains before confirming the conflict graph.")
-                    st.session_state.conflict_graph_confirmed = False
-                else:
-                    st.session_state.conflict_graph_confirmed = True
-                    st.session_state.config["conflict_graph_confirmed"] = True
-                    st.success("Conflict graph confirmed. CP-SAT is ready.")
-                    st.dataframe(
-                            view_df,
-                            use_container_width=True,
-                            hide_index=True)
-
-                    # DOWNLOAD
-                    st.download_button(
-                        "Download Timetable CSV",
-                        data=view_df.to_csv(index=False).encode("utf-8"),
-                        file_name=f"{view_type}_{selected}.csv",
-                        mime="text/csv",
-                        key=f"download_{view_type}"
-                    )
-    
-                    else:
-    
-                        st.warning("No timetable data available for this selection.")
-    
-            else:
-    
-                st.info(
-                    "Generate the timetable using CP-SAT first. "
-                    "The timetable viewer will remain available after generation."
+                # ------------------------------------------------------------
+                # 15. DOWNLOAD GRAPH DATA
+                # ------------------------------------------------------------
+                
+                STATIC_EDGE_DF = pd.DataFrame(STATIC_GRAPH_EDGES)
+                
+                NODE_MAPPING_DF = pd.DataFrame(
+                    list(GRAPH_VERTICES.values())
                 )
-
+                
+                st.download_button(
+                    "Download Fixed Conflict Edges",
+                    data=STATIC_EDGE_DF.to_csv(index=False).encode("utf-8"),
+                    file_name="STATIC_CONFLICT_EDGES.csv",
+                    mime="text/csv"
+                )
+                
+                st.download_button(
+                    "Download Node Mapping",
+                    data=NODE_MAPPING_DF.to_csv(index=False).encode("utf-8"),
+                    file_name="GRAPH_NODE_MAPPING.csv",
+                    mime="text/csv"
+                )
+                
+                st.divider()
+                
+                # ------------------------------------------------------------
+                # 16. CONFIRM CONFLICT GRAPH
+                # ------------------------------------------------------------
+                
+                if st.button(
+                    "Confirm Conflict Graph",
+                    type="primary",
+                    use_container_width=True
+                ):
+                
+                    if not st.session_state.get(
+                        "scheduling_domains_confirmed", False
+                    ):
+                
+                        st.error(
+                            "Confirm candidate domains before confirming the conflict graph."
+                        )
+                
+                        st.session_state.conflict_graph_confirmed = False
+                
+                        st.session_state.config[
+                            "conflict_graph_confirmed"
+                        ] = False
+                
+                    else:
+                
+                        st.session_state.conflict_graph_confirmed = True
+                
+                        st.session_state.config[
+                            "conflict_graph_confirmed"
+                        ] = True
+                
+                        st.success(
+                            "Conflict graph confirmed. CP-SAT is ready."
+                        )
+                
+                # ------------------------------------------------------------
+                # 17. CP-SAT READY STATUS
+                # ------------------------------------------------------------
+                
+                if st.session_state.get(
+                    "conflict_graph_confirmed", False
+                ):
+                
+                    st.success(
+                        "Conflict graph is confirmed. You can now proceed to CP-SAT."
+                    )
+                
+                else:
+                
+                    st.info(
+                        "Confirm the conflict graph before proceeding to CP-SAT."
+                    )
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
 # =========================================================
