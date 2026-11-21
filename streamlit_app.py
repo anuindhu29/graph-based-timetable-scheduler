@@ -6026,10 +6026,106 @@ elif page == "8. Generate Timetable":
                     CONDITIONAL_CONFLICTS
                 )
             
+                # -------------------------------------------------
+                # ADD CANDIDATE TIME SLOTS FOR EACH SESSION
+                # -------------------------------------------------
+            
+                def get_candidate_times(session_id):
+            
+                    domain = SCHEDULING_DOMAINS.get(
+                        str(session_id),
+                        []
+                    )
+            
+                    slots = sorted({
+            
+                        (
+                            str(option["Day"]),
+                            str(option["Start_Time"]),
+                            str(option["End_Time"])
+                        )
+            
+                        for option in domain
+            
+                    })
+            
+                    return slots
+            
+            
+                def format_slots(slots):
+            
+                    return "\n".join(
+            
+                        f"{day}: {start} - {end}"
+            
+                        for day, start, end in slots
+            
+                    )
+            
+            
+                CONDITIONAL_DF["Session_A_Time_Slots"] = (
+                    CONDITIONAL_DF["Session_A"].apply(
+                        lambda sid: format_slots(
+                            get_candidate_times(sid)
+                        )
+                    )
+                )
+            
+            
+                CONDITIONAL_DF["Session_B_Time_Slots"] = (
+                    CONDITIONAL_DF["Session_B"].apply(
+                        lambda sid: format_slots(
+                            get_candidate_times(sid)
+                        )
+                    )
+                )
+            
+            
+                # -------------------------------------------------
+                # COMMON POSSIBLE TIME SLOTS
+                # -------------------------------------------------
+            
+                def get_common_slots(session_a, session_b):
+            
+                    slots_a = set(
+                        get_candidate_times(session_a)
+                    )
+            
+                    slots_b = set(
+                        get_candidate_times(session_b)
+                    )
+            
+                    common = sorted(
+                        slots_a.intersection(slots_b)
+                    )
+            
+                    return format_slots(common)
+            
+            
+                CONDITIONAL_DF["Common_Possible_Time_Slots"] = (
+                    CONDITIONAL_DF.apply(
+            
+                        lambda row: get_common_slots(
+                            row["Session_A"],
+                            row["Session_B"]
+                        ),
+            
+                        axis=1
+            
+                    )
+                )
+            
+            
                 st.dataframe(
                     CONDITIONAL_DF,
                     use_container_width=True,
                     hide_index=True
+                )
+            
+            else:
+            
+                st.info(
+                    "No conditional relationships were detected."
                 )
             
             else:
