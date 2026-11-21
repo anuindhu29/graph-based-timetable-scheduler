@@ -6310,6 +6310,102 @@ elif page == "8. Generate Timetable":
                 st.info(
                     "Confirm the conflict graph before proceeding to CP-SAT."
                 )
+elif page == "9. CP-SAT Timetable Solver":
+
+    st.header("CP-SAT Timetable Generation")
+
+    st.write(
+        "Generate a feasible timetable using Google OR-Tools CP-SAT."
+    )
+
+    # -----------------------------------------------------
+    # 1. CHECK INPUT DATA
+    # -----------------------------------------------------
+
+    required_state = [
+        "scheduling_sessions",
+        "scheduling_domains",
+        "STATIC_GRAPH_EDGES"
+    ]
+
+    missing_state = [
+        item for item in required_state
+        if item not in st.session_state
+    ]
+
+    if missing_state:
+
+        st.error(
+            "Required scheduling data is missing. "
+            "Complete the scheduling dataset, domains, "
+            "and conflict graph first."
+        )
+
+    elif not st.session_state.get("scheduling_dataset_confirmed", False):
+
+        st.warning("Confirm the scheduling dataset on Page 8 first.")
+
+    elif not st.session_state.get("scheduling_domains_confirmed", False):
+
+        st.warning("Review and confirm candidate domains on Page 8 first.")
+
+    elif not st.session_state.get("conflict_graph_confirmed", False):
+
+        st.warning("Review and confirm the conflict graph on Page 8 first.")
+
+    else:
+
+        SESSIONS = st.session_state.scheduling_sessions.copy()
+
+        DOMAINS = st.session_state.scheduling_domains
+
+        GRAPH_EDGES = st.session_state.STATIC_GRAPH_EDGES
+
+        # -------------------------------------------------
+        # 2. CHECK EMPTY DOMAINS
+        # -------------------------------------------------
+
+        empty_sessions = [
+            session_id
+            for session_id, domain in DOMAINS.items()
+            if not domain
+        ]
+
+        if empty_sessions:
+
+            st.error(
+                f"{len(empty_sessions)} session(s) have empty domains."
+            )
+
+            st.write(empty_sessions)
+
+        else:
+
+            st.success(
+                f"All {len(DOMAINS)} sessions have candidate assignments."
+            )
+
+        # -------------------------------------------------
+        # 3. GRAPH CONFLICT LOOKUP
+        # -------------------------------------------------
+
+        SECTION_CONFLICT_PAIRS = set()
+
+        for edge in GRAPH_EDGES:
+
+            a = str(edge["Source"])
+            b = str(edge["Target"])
+
+            SECTION_CONFLICT_PAIRS.add(
+                tuple(sorted((a, b)))
+            )
+
+        # -------------------------------------------------
+        # 4. SOLVER BUTTON
+        # -------------------------------------------------
+
+        if st.button(
+            "🚀 Generate Timetable using CP-SAT",
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
 # =========================================================
