@@ -5125,7 +5125,7 @@ elif page == "8. Generate Timetable":
             if EMPTY_DOMAIN_SESSIONS.empty:
 
                 if st.button(
-                    "✅ Confirm Domains & Continue to Conflict Graph",
+                    "Confirm Domains & Continue to Conflict Graph",
                     type="primary",
                     use_container_width=True
                 ):
