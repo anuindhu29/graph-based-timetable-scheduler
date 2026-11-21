@@ -2714,7 +2714,7 @@ elif page == "8. Generate Timetable":
             st.warning(
                 "Confirm Weekly Course Requirements first."
             )
-                # =================================================
+        # =================================================
         # CELL 15: FACULTY ELIGIBILITY & AVAILABILITY
         # =================================================
 
@@ -3652,297 +3652,884 @@ elif page == "8. Generate Timetable":
                     for error in faculty_subject_errors:
 
                         st.write("⚠️", error)
-        # =================================================
-        # SCHEDULING SESSION GENERATION
+                        # =================================================
+        # CELL 19: TEACHING SESSION GENERATION
         # =================================================
 
         st.divider()
-        st.subheader("Scheduling Session Generation")
+        st.subheader(
+            "Teaching Session Generation & Scheduling Dataset"
+        )
 
-        if st.session_state.get(
-            "course_requirements_confirmed",
-            False
-        ):
+        required_confirmations = {
+            "Faculty Configuration": (
+                st.session_state.get(
+                    "faculty_configuration_confirmed", False
+                )
+            ),
+            "Classroom Allocation": (
+                st.session_state.get(
+                    "classroom_allocation_confirmed", False
+                )
+            ),
+            "Laboratory Configuration": (
+                st.session_state.get(
+                    "lab_configuration_confirmed", False
+                )
+            )
+        }
 
-            st.write(
-                "Generate individual theory sessions and "
-                "continuous laboratory blocks for every section."
+        missing_confirmations = [
+            name
+            for name, status in required_confirmations.items()
+            if not status
+        ]
+
+        if missing_confirmations:
+
+            st.error(
+                "Complete these configurations first: "
+                + ", ".join(missing_confirmations)
             )
 
-            if st.button(
-                "Generate Scheduling Sessions",
-                type="primary",
-                use_container_width=True
-            ):
+        elif (
+            "active_curriculum" not in locals()
+            or active_curriculum.empty
+        ):
 
-                requirements = st.session_state.course_requirements
+            st.error(
+                "Selected semester curriculum is missing."
+            )
 
-                academic_config = st.session_state.config[
-                    "academic_programmes"
+        elif (
+            "section_list" not in st.session_state
+            or st.session_state.section_list.empty
+        ):
+
+            st.error(
+                "SECTION_LIST is missing."
+            )
+
+        elif (
+            "faculty_eligibility"
+            not in st.session_state
+        ):
+
+            st.error(
+                "Faculty eligibility data is missing."
+            )
+
+        else:
+
+            # ---------------------------------------------
+            # 1. PREPARE CURRICULUM
+            # ---------------------------------------------
+
+            CURRICULUM_FOR_SCHEDULING = (
+                active_curriculum.copy()
+            )
+
+            SECTION_LIST = (
+                st.session_state.section_list.copy()
+            )
+
+            FACULTY_ELIGIBILITY = (
+                st.session_state.faculty_eligibility.copy()
+            )
+
+            SECTION_CLASSROOM_MAPPING = (
+                st.session_state.section_classroom_mapping_df.copy()
+            )
+
+            LAB_ELIGIBILITY_MAPPING = (
+                st.session_state.lab_eligibility_mapping.copy()
+            )
+
+            # ---------------------------------------------
+            # 2. FIND CURRICULUM COLUMNS
+            # ---------------------------------------------
+
+            def find_column(df, possible_names):
+
+                for name in possible_names:
+
+                    if name in df.columns:
+                        return name
+
+                return None
+
+
+            programme_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "Programme",
+                    "Program",
+                    "Programme Name",
+                    "Programme_Type"
                 ]
+            )
 
-                lab_mapping = st.session_state.get(
-                    "lab_course_mapping",
-                    {}
+            semester_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "Semester",
+                    "Semester Number"
+                ]
+            )
+
+            course_code_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "Course_Code",
+                    "Course Code",
+                    "Course_ID",
+                    "Course ID"
+                ]
+            )
+
+            course_title_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "Course_Title",
+                    "Course Title",
+                    "Course_Name",
+                    "Course Name",
+                    "Original Course Title"
+                ]
+            )
+
+            subject_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "Normalized Subject",
+                    "Normalized_Subject"
+                ]
+            )
+
+            matching_subject_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "Matching Subject",
+                    "Matching_Subject"
+                ]
+            )
+
+            l_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "L",
+                    "Lecture",
+                    "L_Hours"
+                ]
+            )
+
+            t_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "T",
+                    "Tutorial",
+                    "T_Hours"
+                ]
+            )
+
+            p_col = find_column(
+                CURRICULUM_FOR_SCHEDULING,
+                [
+                    "P",
+                    "Practical",
+                    "P_Hours"
+                ]
+            )
+
+            required_columns = {
+                "Programme": programme_col,
+                "Semester": semester_col,
+                "Course Title": course_title_col,
+                "L": l_col,
+                "T": t_col,
+                "P": p_col
+            }
+
+            missing_columns = [
+                name
+                for name, column in required_columns.items()
+                if column is None
+            ]
+
+            if missing_columns:
+
+                st.error(
+                    "Curriculum is missing required fields: "
+                    + ", ".join(missing_columns)
                 )
 
-                generated_sessions = []
-                generation_errors = []
+                st.write(
+                    "Available columns:",
+                    list(CURRICULUM_FOR_SCHEDULING.columns)
+                )
 
-                # -----------------------------------------
-                # GENERATE SECTION LABELS
-                # -----------------------------------------
+            else:
 
-                programme_sections = {
-                    "B.Tech": [
-                        f"B.Tech-S{i}"
-                        for i in range(
-                            1,
-                            academic_config["B.Tech"]["sections"] + 1
+                # ---------------------------------------------
+                # 3. HELPER FUNCTIONS
+                # ---------------------------------------------
+
+                def safe_number(value):
+
+                    try:
+
+                        if pd.isna(value):
+                            return 0
+
+                        return max(
+                            0,
+                            int(float(value))
                         )
-                    ],
-                    "M.Tech": [
-                        f"M.Tech-S{i}"
-                        for i in range(
-                            1,
-                            academic_config["M.Tech"]["sections"] + 1
+
+                    except (ValueError, TypeError):
+
+                        return 0
+
+
+                def safe_text(value):
+
+                    if pd.isna(value):
+                        return ""
+
+                    return str(value).strip()
+
+
+                def get_course_subject(row):
+
+                    if subject_col is not None:
+
+                        value = safe_text(
+                            row[subject_col]
                         )
-                    ]
-                }
 
-                # -----------------------------------------
-                # GENERATE INDIVIDUAL SESSIONS
-                # -----------------------------------------
+                        if value:
+                            return value
 
-                for _, course in requirements.iterrows():
+                    if matching_subject_col is not None:
 
-                    programme = course["Programme"]
-                    semester = int(course["Semester"])
-                    course_id = str(course["Course_ID"])
-                    course_name = str(course["Course_Name"])
+                        value = safe_text(
+                            row[matching_subject_col]
+                        )
 
-                    theory_count = int(
-                        course["Theory_Sessions_Per_Week"]
+                        if value:
+                            return value
+
+                    return safe_text(
+                        row[course_title_col]
                     )
 
-                    lab_count = int(
-                        course["Lab_Sessions_Per_Week"]
+
+                def get_course_code(row):
+
+                    if course_code_col is None:
+
+                        return "NOT_SPECIFIED"
+
+                    value = safe_text(
+                        row[course_code_col]
                     )
 
-                    lab_duration = int(
-                        course["Lab_Consecutive_Periods"]
+                    return (
+                        value
+                        if value
+                        else "NOT_SPECIFIED"
                     )
 
-                    course_key = (
-                        f"{programme}_Sem{semester}_{course_id}"
+
+                def get_course_labs(
+                    section_id,
+                    course_code,
+                    course_title
+                ):
+
+                    if LAB_ELIGIBILITY_MAPPING.empty:
+                        return []
+
+                    matching = (
+                        LAB_ELIGIBILITY_MAPPING[
+                            (
+                                LAB_ELIGIBILITY_MAPPING[
+                                    "Section_ID"
+                                ].astype(str)
+                                == str(section_id)
+                            )
+                            &
+                            (
+                                LAB_ELIGIBILITY_MAPPING[
+                                    "Course_Code"
+                                ].astype(str)
+                                == str(course_code)
+                            )
+                        ]
                     )
 
-                    sections = programme_sections.get(
-                        programme,
-                        []
+                    # Notebook fallback:
+                    # match using course title
+                    if matching.empty:
+
+                        matching = (
+                            LAB_ELIGIBILITY_MAPPING[
+                                (
+                                    LAB_ELIGIBILITY_MAPPING[
+                                        "Section_ID"
+                                    ].astype(str)
+                                    == str(section_id)
+                                )
+                                &
+                                (
+                                    LAB_ELIGIBILITY_MAPPING[
+                                        "Course_Title"
+                                    ].astype(str)
+                                    == str(course_title)
+                                )
+                            ]
+                        )
+
+                    if matching.empty:
+                        return []
+
+                    return sorted(
+                        matching[
+                            "Laboratory"
+                        ]
+                        .dropna()
+                        .astype(str)
+                        .unique()
+                        .tolist()
                     )
 
-                    # -------------------------------------
-                    # THEORY SESSIONS
-                    # -------------------------------------
 
-                    for section in sections:
+                # ---------------------------------------------
+                # 4. GENERATE INDIVIDUAL SESSIONS
+                # ---------------------------------------------
 
-                        for session_number in range(
+                session_records = []
+
+                session_counter = 1
+
+                for _, section in SECTION_LIST.iterrows():
+
+                    section_id = str(
+                        section["Section_ID"]
+                    )
+
+                    programme = section["Programme"]
+
+                    semester = section["Semester"]
+
+                    section_name = section["Section"]
+
+                    section_courses = (
+                        CURRICULUM_FOR_SCHEDULING[
+                            (
+                                CURRICULUM_FOR_SCHEDULING[
+                                    programme_col
+                                ].astype(str)
+                                == str(programme)
+                            )
+                            &
+                            (
+                                CURRICULUM_FOR_SCHEDULING[
+                                    semester_col
+                                ].astype(str)
+                                == str(semester)
+                            )
+                        ]
+                    )
+
+                    # -----------------------------------------
+                    # FIXED CLASSROOM FOR SECTION
+                    # -----------------------------------------
+
+                    room_match = (
+                        SECTION_CLASSROOM_MAPPING[
+                            SECTION_CLASSROOM_MAPPING[
+                                "Section_ID"
+                            ].astype(str)
+                            == section_id
+                        ]
+                    )
+
+                    fixed_classroom = (
+                        room_match.iloc[0]["Classroom"]
+                        if not room_match.empty
+                        else None
+                    )
+
+                    # -----------------------------------------
+                    # PROCESS EACH COURSE
+                    # -----------------------------------------
+
+                    for _, course in section_courses.iterrows():
+
+                        course_code = get_course_code(
+                            course
+                        )
+
+                        course_title = safe_text(
+                            course[course_title_col]
+                        )
+
+                        normalized_subject = (
+                            get_course_subject(course)
+                        )
+
+                        lecture_count = safe_number(
+                            course[l_col]
+                        )
+
+                        tutorial_count = safe_number(
+                            course[t_col]
+                        )
+
+                        practical_count = safe_number(
+                            course[p_col]
+                        )
+
+                        # Notebook faculty eligibility function
+                        eligible_faculty = (
+                            get_eligible_faculty_for_subject(
+                                normalized_subject,
+                                programme,
+                                semester
+                            )
+                        )
+
+                        # -------------------------------------
+                        # THEORY: L + T
+                        # -------------------------------------
+
+                        theory_count = (
+                            lecture_count
+                            + tutorial_count
+                        )
+
+                        for number in range(
                             1,
                             theory_count + 1
                         ):
 
-                            session_id = (
-                                f"{course_id}_{section}_T"
-                                f"{session_number}"
-                            )
+                            session_records.append({
 
-                            generated_sessions.append({
+                                "Session_ID": (
+                                    f"SESSION_{session_counter:04d}"
+                                ),
 
-                                "Session_ID": session_id,
+                                "Section_ID": section_id,
 
                                 "Programme": programme,
 
                                 "Semester": semester,
 
-                                "Section": section,
+                                "Section": section_name,
 
-                                "Course_ID": course_id,
+                                "Course_Code": course_code,
 
-                                "Course_Name": course_name,
+                                "Course_Title": course_title,
+
+                                "Normalized_Subject": (
+                                    normalized_subject
+                                ),
 
                                 "Session_Type": "Theory",
 
-                                "Session_Number": session_number,
+                                "Session_Number": number,
 
-                                "Duration_Periods": 1,
+                                "Periods_Required": 1,
 
-                                "Compatible_Labs": [],
+                                "Consecutive": False,
 
-                                "Faculty_Candidates": []
+                                "Eligible_Faculty": (
+                                    eligible_faculty
+                                ),
+
+                                "Candidate_Faculty_Count": (
+                                    len(eligible_faculty)
+                                ),
+
+                                "Fixed_Classroom": (
+                                    fixed_classroom
+                                ),
+
+                                "Candidate_Labs": [],
+
+                                "Coverage_Status": (
+                                    "Covered"
+                                    if eligible_faculty
+                                    else "No Eligible Faculty"
+                                )
 
                             })
 
-                    # -------------------------------------
-                    # LAB SESSIONS
-                    # -------------------------------------
+                            session_counter += 1
 
-                    if lab_count > 0:
+                        # -------------------------------------
+                        # LAB: ONE 2-PERIOD BLOCK IF P > 0
+                        # -------------------------------------
 
-                        compatible_labs = lab_mapping.get(
-                            course_key,
-                            []
-                        )
+                        if practical_count > 0:
 
-                        if not compatible_labs:
-
-                            generation_errors.append(
-                                f"{course_key}: No compatible "
-                                "laboratory mapping found."
+                            candidate_labs = (
+                                get_course_labs(
+                                    section_id,
+                                    course_code,
+                                    course_title
+                                )
                             )
 
-                        else:
+                            session_records.append({
 
-                            for section in sections:
+                                "Session_ID": (
+                                    f"SESSION_{session_counter:04d}"
+                                ),
 
-                                for session_number in range(
-                                    1,
-                                    lab_count + 1
-                                ):
+                                "Section_ID": section_id,
 
-                                    session_id = (
-                                        f"{course_id}_{section}_L"
-                                        f"{session_number}"
-                                    )
+                                "Programme": programme,
 
-                                    generated_sessions.append({
+                                "Semester": semester,
 
-                                        "Session_ID": session_id,
+                                "Section": section_name,
 
-                                        "Programme": programme,
+                                "Course_Code": course_code,
 
-                                        "Semester": semester,
+                                "Course_Title": course_title,
 
-                                        "Section": section,
+                                "Normalized_Subject": (
+                                    normalized_subject
+                                ),
 
-                                        "Course_ID": course_id,
+                                "Session_Type": "Laboratory",
 
-                                        "Course_Name": course_name,
+                                "Session_Number": 1,
 
-                                        "Session_Type": "Lab",
+                                "Periods_Required": 2,
 
-                                        "Session_Number": session_number,
+                                "Consecutive": True,
 
-                                        "Duration_Periods": lab_duration,
+                                "Eligible_Faculty": (
+                                    eligible_faculty
+                                ),
 
-                                        "Compatible_Labs": (
-                                            compatible_labs.copy()
-                                        ),
+                                "Candidate_Faculty_Count": (
+                                    len(eligible_faculty)
+                                ),
 
-                                        "Faculty_Candidates": []
+                                "Fixed_Classroom": None,
 
-                                    })
+                                "Candidate_Labs": (
+                                    candidate_labs
+                                ),
 
-                # -----------------------------------------
-                # VALIDATION
-                # -----------------------------------------
+                                "Coverage_Status": (
+                                    "Covered"
+                                    if eligible_faculty
+                                    else "No Eligible Faculty"
+                                )
 
-                if generation_errors:
+                            })
+
+                            session_counter += 1
+
+
+                # ---------------------------------------------
+                # 5. CREATE SCHEDULING DATASET
+                # ---------------------------------------------
+
+                SCHEDULING_SESSIONS = pd.DataFrame(
+                    session_records
+                )
+
+                if SCHEDULING_SESSIONS.empty:
 
                     st.error(
-                        "Session generation stopped because "
-                        "some laboratory mappings are missing."
+                        "No scheduling sessions were generated. "
+                        "Check curriculum and section configuration."
                     )
-
-                    for error in generation_errors:
-                        st.write("❌", error)
 
                 else:
 
-                    sessions_df = pd.DataFrame(
-                        generated_sessions
+                    # -----------------------------------------
+                    # 6. IDENTIFY UNRESOLVED REQUIREMENTS
+                    # -----------------------------------------
+
+                    NO_FACULTY_SESSIONS = (
+                        SCHEDULING_SESSIONS[
+                            SCHEDULING_SESSIONS[
+                                "Candidate_Faculty_Count"
+                            ] == 0
+                        ].copy()
                     )
 
-                    st.session_state.generated_sessions = (
-                        sessions_df.copy()
+                    NO_LAB_SESSIONS = (
+                        SCHEDULING_SESSIONS[
+                            (
+                                SCHEDULING_SESSIONS[
+                                    "Session_Type"
+                                ] == "Laboratory"
+                            )
+                            &
+                            (
+                                SCHEDULING_SESSIONS[
+                                    "Candidate_Labs"
+                                ].apply(len) == 0
+                            )
+                        ].copy()
                     )
 
-                    st.session_state.config[
-                        "generated_sessions"
-                    ] = generated_sessions
-
-                    st.success(
-                        f"Successfully generated "
-                        f"{len(sessions_df)} scheduling sessions."
+                    NO_CLASSROOM_SESSIONS = (
+                        SCHEDULING_SESSIONS[
+                            (
+                                SCHEDULING_SESS[
+                                    "Session_Type"
+                                ] == "Theory"
+                            )
+                            &
+                            (
+                                SCHEDULING_SESSIONS[
+                                    "Fixed_Classroom"
+                                ].isna()
+                            )
+                        ].copy()
                     )
 
-                    # -------------------------------------
-                    # SUMMARY
-                    # -------------------------------------
+                    # -----------------------------------------
+                    # 7. SUMMARY
+                    # -----------------------------------------
 
                     theory_total = (
-                        sessions_df["Session_Type"]
-                        .eq("Theory")
-                        .sum()
-                    )
+                        SCHEDULING_SESSIONS[
+                            "Session_Type"
+                        ] == "Theory"
+                    ).sum()
 
                     lab_total = (
-                        sessions_df["Session_Type"]
-                        .eq("Lab")
-                        .sum()
+                        SCHEDULING_SESSIONS[
+                            "Session_Type"
+                        ] == "Laboratory"
+                    ).sum()
+
+                    st.success(
+                        "Scheduling dataset generated."
                     )
 
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2, col3, col4 = st.columns(4)
 
                     col1.metric(
-                        "Total Scheduling Sessions",
-                        len(sessions_df)
+                        "Sections",
+                        len(SECTION_LIST)
                     )
 
                     col2.metric(
-                        "Theory Sessions",
-                        int(theory_total)
+                        "Courses",
+                        len(CURRICULUM_FOR_SCHEDULING)
                     )
 
                     col3.metric(
-                        "Laboratory Blocks",
-                        int(lab_total)
+                        "Total Sessions",
+                        len(SCHEDULING_SESSIONS)
                     )
 
-                    # -------------------------------------
-                    # DISPLAY GENERATED SESSIONS
-                    # -------------------------------------
+                    col4.metric(
+                        "Theory / Lab",
+                        f"{int(theory_total)} / {int(lab_total)}"
+                    )
 
                     st.subheader(
                         "Generated Scheduling Sessions"
                     )
 
                     st.dataframe(
-                        sessions_df,
+                        SCHEDULING_SESSIONS,
                         use_container_width=True,
                         hide_index=True
                     )
 
-                    # -------------------------------------
-                    # DOWNLOAD
-                    # -------------------------------------
+                    # -----------------------------------------
+                    # 8. UNRESOLVED REQUIREMENTS
+                    # -----------------------------------------
 
-                    st.download_button(
-                        "Download Generated Sessions CSV",
-                        data=sessions_df.to_csv(
-                            index=False
-                        ).encode("utf-8"),
-                        file_name="GENERATED_SCHEDULING_SESSIONS.csv",
-                        mime="text/csv"
+                    st.subheader(
+                        "Unresolved Requirements"
                     )
 
-        else:
+                    col1, col2, col3 = st.columns(3)
 
-            st.warning(
-                "Confirm Weekly Course Requirements first."
-            ) 
- 
+                    col1.metric(
+                        "No Eligible Faculty",
+                        len(NO_FACULTY_SESSIONS)
+                    )
+
+                    col2.metric(
+                        "No Candidate Laboratory",
+                        len(NO_LAB_SESSIONS)
+                    )
+
+                    col3.metric(
+                        "No Fixed Classroom",
+                        len(NO_CLASSROOM_SESSIONS)
+                    )
+
+                    if not NO_FACULTY_SESSIONS.empty:
+
+                        st.warning(
+                            "Sessions without eligible faculty"
+                        )
+
+                        st.dataframe(
+                            NO_FACULTY_SESSIONS,
+                            use_container_width=True
+                        )
+
+                    if not NO_LAB_SESSIONS.empty:
+
+                        st.warning(
+                            "Lab sessions without candidate labs"
+                        )
+
+                        st.dataframe(
+                            NO_LAB_SESSIONS,
+                            use_container_width=True
+                        )
+
+                    if not NO_CLASSROOM_SESSIONS.empty:
+
+                        st.warning(
+                            "Theory sessions without fixed classrooms"
+                        )
+
+                        st.dataframe(
+                            NO_CLASSROOM_SESSIONS,
+                            use_container_width=True
+                        )
+
+                    # -----------------------------------------
+                    # 9. SAVE DATASET
+                    # -----------------------------------------
+
+                    st.session_state.scheduling_sessions = (
+                        SCHEDULING_SESSIONS.copy()
+                    )
+
+                    st.session_state.no_faculty_sessions = (
+                        NO_FACULTY_SESSIONS.copy()
+                    )
+
+                    st.session_state.no_lab_sessions = (
+                        NO_LAB_SESSIONS.copy()
+                    )
+
+                    st.session_state.no_classroom_sessions = (
+                        NO_CLASSROOM_SESSIONS.copy()
+                    )
+
+                    st.session_state.scheduling_dataset_confirmed = False
+
+                    st.session_state.config[
+                        "scheduling_sessions"
+                    ] = SCHEDULING_SESSIONS.to_dict(
+                        orient="records"
+                    )
+
+                    st.session_state.config[
+                        "scheduling_dataset_summary"
+                    ] = {
+
+                        "total_sessions": (
+                            len(SCHEDULING_SESSIONS)
+                        ),
+
+                        "theory_sessions": int(
+                            theory_total
+                        ),
+
+                        "lab_sessions": int(
+                            lab_total
+                        ),
+
+                        "total_sections": (
+                            len(SECTION_LIST)
+                        )
+
+                    }
+
+                    # -----------------------------------------
+                    # 10. REVIEW & CONFIRM
+                    # -----------------------------------------
+
+                    st.divider()
+
+                    if st.button(
+                        "Confirm Scheduling Dataset",
+                        type="primary",
+                        use_container_width=True
+                    ):
+
+                        errors = []
+
+                        if not NO_FACULTY_SESSIONS.empty:
+
+                            errors.append(
+                                f"{len(NO_FACULTY_SESSIONS)} "
+                                "sessions have no eligible faculty."
+                            )
+
+                        if not NO_LAB_SESSIONS.empty:
+
+                            errors.append(
+                                f"{len(NO_LAB_SESSIONS)} "
+                                "lab sessions have no candidate laboratory."
+                            )
+
+                        if not NO_CLASSROOM_SESSIONS.empty:
+
+                            errors.append(
+                                f"{len(NO_CLASSROOM_SESSIONS)} "
+                                "theory sessions have no fixed classroom."
+                            )
+
+                        if errors:
+
+                            st.session_state.scheduling_dataset_confirmed = False
+
+                            st.error(
+                                "Dataset cannot be confirmed yet."
+                            )
+
+                            for error in errors:
+
+                                st.write("❌", error)
+
+                        else:
+
+                            st.session_state.scheduling_dataset_confirmed = True
+
+                            st.session_state.config[
+                                "scheduling_dataset_confirmed"
+                            ] = True
+
+                            st.success(
+                                "Scheduling dataset confirmed successfully!"
+                            )
+
+                    # -----------------------------------------
+                    # 11. DOWNLOAD
+                    # -----------------------------------------
+
+                    st.download_button(
+                        "Download Scheduling Dataset CSV",
+                        data=SCHEDULING_SESSIONS.to_csv(
+                            index=False
+                        ).encode("utf-8"),
+                        file_name="SCHEDULING_SESSIONS.csv",
+                        mime="text/csv"
+                    )
+       
 # =========================================================
 # FOOTER
 # =========================================================
