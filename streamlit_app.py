@@ -2032,314 +2032,407 @@ elif page == "8. Generate Timetable":
                         ].sum()
                     )
                 )
-                    # =================================================
-        # LAB-COURSE COMPATIBILITY MAPPING
+        # =================================================
+        # CELL 18: LABORATORY REQUIREMENTS AND LAB ELIGIBILITY
         # =================================================
 
         st.divider()
+        st.subheader("Laboratory Requirements & Lab Eligibility")
 
-        st.subheader("Lab–Course Compatibility Mapping")
+        # -------------------------------------------------
+        # 1. VALIDATE PREVIOUS CONFIGURATIONS
+        # -------------------------------------------------
 
-        st.write(
-            "Select which laboratories each practical course "
-            "is permitted to use."
-        )
+        if not st.session_state.get(
+            "room_lab_confirmed", False
+        ):
 
-        # ---------------------------------------------
-        # GET LABORATORY RESOURCES
-        # ---------------------------------------------
-        rooms_df = uploaded_data["rooms"]["data"].copy()
-
-        rooms_df.columns = (
-            rooms_df.columns.astype(str).str.strip()
-        )
-
-        # Remove unwanted exported index columns
-        rooms_df = rooms_df.loc[
-            :,
-            ~rooms_df.columns.astype(str).str.startswith("Unnamed")
-        ]
-
-        lab_resources = rooms_df[
-            rooms_df["Type"].astype(str).str.lower().str.contains(
-                "lab", na=False
+            st.error(
+                "Please confirm Classroom & Laboratory "
+                "Configuration first."
             )
-        ].copy()
 
-        # ---------------------------------------------
-        # CREATE LAB OPTIONS
-        # ---------------------------------------------
-        lab_options = {}
+        elif not st.session_state.get(
+            "classroom_allocation_confirmed", False
+        ):
 
-        for _, lab in lab_resources.iterrows():
+            st.error(
+                "Please confirm Fixed Classroom Allocation first."
+            )
 
-            lab_id = str(lab["Room/Lab ID"])
+        elif not st.session_state.get(
+            "course_requirements_confirmed", False
+        ):
 
-            lab_name = str(lab["Room/Lab Name"])
-
-            lab_options[
-                f"{lab_id} - {lab_name}"
-            ] = lab_id
-
-        # ---------------------------------------------
-        # IDENTIFY COURSES REQUIRING LABS
-        # ---------------------------------------------
-        lab_courses = requirements_df[
-            requirements_df[
-                "Lab_Sessions_Per_Week"
-            ] > 0
-        ].copy()
-
-        # ---------------------------------------------
-        # EXISTING MAPPING
-        # ---------------------------------------------
-        existing_mapping = st.session_state.get(
-            "lab_course_mapping",
-            {}
-        )
-
-        current_mapping = {}
-
-        # ---------------------------------------------
-        # DISPLAY COURSE-WISE MAPPING
-        # ---------------------------------------------
-        if lab_courses.empty:
-
-            st.info(
-                "No laboratory courses were identified "
-                "in the selected semesters."
+            st.error(
+                "Please confirm Weekly Course Requirements first."
             )
 
         else:
 
-            st.write(
-                f"Laboratory courses identified: "
-                f"{len(lab_courses)}"
+            requirements_df = (
+                st.session_state.course_requirements.copy()
             )
 
-            for _, course in lab_courses.iterrows():
+            section_df = (
+                st.session_state.section_list.copy()
+            )
 
-                course_key = (
-                    f"{course['Programme']}_"
-                    f"Sem{course['Semester']}_"
-                    f"{course['Course_ID']}"
-                )
+            rooms_df = (
+                st.session_state.room_lab_config.copy()
+            )
 
-                course_label = (
-                    f"{course['Programme']} | "
-                    f"Semester {course['Semester']} | "
-                    f"{course['Course_ID']} — "
-                    f"{course['Course_Name']}"
-                )
+            # -------------------------------------------------
+            # 2. IDENTIFY LABORATORIES
+            # -------------------------------------------------
 
-                previously_selected = (
-                    existing_mapping.get(course_key, [])
-                )
+            laboratory_inventory = rooms_df[
+                rooms_df["Type"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .str.contains("lab", na=False)
+            ].copy()
 
-                selected_options = [
-                    option
-                    for option, lab_id in lab_options.items()
-                    if lab_id in previously_selected
+            available_labs = (
+                laboratory_inventory["Room/Lab ID"]
+                .astype(str)
+                .tolist()
+            )
+
+            # -------------------------------------------------
+            # 3. IDENTIFY LAB COURSES
+            # -------------------------------------------------
+
+            lab_courses = requirements_df[
+                requirements_df[
+                    "Lab_Sessions_Per_Week"
+                ] > 0
+            ].copy()
+
+            # -------------------------------------------------
+            # 4. GENERATE LAB REQUIREMENTS PER SECTION
+            # -------------------------------------------------
+
+            lab_requirement_records = []
+
+            for _, section in section_df.iterrows():
+
+                section_courses = lab_courses[
+                    (
+                        lab_courses["Programme"]
+                        == section["Programme"]
+                    )
+                    &
+                    (
+                        lab_courses["Semester"].astype(str)
+                        == str(section["Semester"])
+                    )
                 ]
 
-                st.markdown(
-                    f"**{course_label}**"
-                )
+                for _, course in section_courses.iterrows():
 
-                selected_labs = st.multiselect(
-                    "Compatible laboratories",
-                    options=list(lab_options.keys()),
-                    default=selected_options,
-                    key=f"lab_mapping_{course_key}",
-                    help=(
-                        "Select all laboratories that can "
-                        "conduct this course."
-                    )
-                )
-
-                current_mapping[course_key] = [
-                    lab_options[option]
-                    for option in selected_labs
-                ]
-
-        # ---------------------------------------------
-        # SAVE LAB MAPPING
-        # ---------------------------------------------
-        if st.button(
-            "Save Lab–Course Mapping",
-            type="primary",
-            use_container_width=True
-        ):
-
-            mapping_errors = []
-
-            if not lab_courses.empty:
-
-                for course_key, selected_lab_ids in (
-                    current_mapping.items()
-                ):
-
-                    if not selected_lab_ids:
-
-                        mapping_errors.append(
-                            f"{course_key}: Select at least "
-                            "one compatible laboratory."
-                        )
-
-            if mapping_errors:
-
-                st.error(
-                    "Please complete the laboratory mapping:"
-                )
-
-                for error in mapping_errors:
-                    st.write("❌", error)
-
-            else:
-
-                st.session_state.lab_course_mapping = (
-                    current_mapping.copy()
-                )
-
-                st.session_state.lab_mapping_confirmed = True
-
-                st.session_state.config[
-                    "lab_course_mapping"
-                ] = current_mapping.copy()
-
-                st.success(
-                    "Lab–Course Compatibility Mapping saved!"
-                )
-
-                mapping_display = []
-
-                for _, course in lab_courses.iterrows():
-
-                    course_key = (
-                        f"{course['Programme']}_"
-                        f"Sem{course['Semester']}_"
-                        f"{course['Course_ID']}"
+                    requirement_id = (
+                        f"LAB_{len(lab_requirement_records)+1:03d}"
                     )
 
-                    mapped_ids = current_mapping.get(
-                        course_key, []
-                    )
+                    lab_requirement_records.append({
 
-                    mapped_names = [
-                        option
-                        for option, lab_id in lab_options.items()
-                        if lab_id in mapped_ids
-                    ]
+                        "Requirement_ID": requirement_id,
 
-                    mapping_display.append({
-                        "Programme": course["Programme"],
-                        "Semester": course["Semester"],
-                        "Course_ID": course["Course_ID"],
-                        "Course_Name": course["Course_Name"],
-                        "Compatible_Labs": ", ".join(
-                            mapped_names
-                        )
+                        "Section_ID": section["Section_ID"],
+
+                        "Programme": section["Programme"],
+
+                        "Semester": section["Semester"],
+
+                        "Section": section["Section"],
+
+                        "Course_Code": course["Course_ID"],
+
+                        "Course_Title": course["Course_Name"],
+
+                        "Matching_Subject": course["Course_Name"],
+
+                        "Practical_Hours": course["P_Hours"],
+
+                        "Lab_Sessions_Per_Week": 1,
+
+                        "Periods_Required": 2,
+
+                        "Consecutive": True
+
                     })
 
-                if mapping_display:
+            LAB_REQUIREMENTS = pd.DataFrame(
+                lab_requirement_records
+            )
 
-                    st.dataframe(
-                        pd.DataFrame(mapping_display),
-                        use_container_width=True
-                    )
-            # -----------------------------------------
-            # EXCLUDED COURSES
-            # -----------------------------------------
-            if excluded_courses:
+            st.session_state.lab_requirements = (
+                LAB_REQUIREMENTS.copy()
+            )
 
-                with st.expander(
-                    "View Excluded Courses"
+            # -------------------------------------------------
+            # 5. HANDLE NO LAB COURSES
+            # -------------------------------------------------
+
+            if LAB_REQUIREMENTS.empty:
+
+                st.info(
+                    "No laboratory courses were identified "
+                    "for the selected curriculum."
+                )
+
+                if st.button(
+                    "Confirm Laboratory Configuration",
+                    type="primary"
                 ):
 
-                    excluded_df = pd.DataFrame(
-                        excluded_courses
+                    empty_mapping = pd.DataFrame()
+
+                    st.session_state.lab_eligibility_mapping = (
+                        empty_mapping
                     )
 
-                    st.dataframe(
-                        excluded_df,
-                        use_container_width=True
+                    st.session_state.lab_configuration_confirmed = True
+
+                    st.session_state.config[
+                        "lab_requirements"
+                    ] = []
+
+                    st.session_state.config[
+                        "lab_eligibility_mapping"
+                    ] = []
+
+                    st.success(
+                        "Laboratory configuration confirmed. "
+                        "No laboratory allocation is required."
                     )
 
-        # ---------------------------------------------
-        # SAVE REQUIREMENTS
-        # ---------------------------------------------
-        st.divider()
+            # -------------------------------------------------
+            # 6. VALIDATE LAB INVENTORY
+            # -------------------------------------------------
 
-        if st.button(
-            "Confirm Weekly Course Requirements",
-            type="primary",
-            use_container_width=True
-        ):
-
-            # Require lab mapping only if lab courses exist
-            if (
-                not lab_courses.empty
-                and not st.session_state.get(
-                    "lab_mapping_confirmed",
-                    False
-                )
-            ):
+            elif laboratory_inventory.empty:
 
                 st.error(
-                    "Please save Lab–Course Compatibility "
-                    "Mapping first."
+                    "Laboratory courses exist, but no laboratories "
+                    "are available in the uploaded inventory."
                 )
 
             else:
 
-                st.session_state.course_requirements = (
-                    requirements_df.copy()
+                st.write(
+                    f"Laboratory course-section requirements: "
+                    f"{len(LAB_REQUIREMENTS)}"
                 )
 
-                st.session_state.course_requirements_confirmed = True
-
-                st.session_state.config[
-                    "course_requirements"
-                ] = scheduling_requirements
-
-                st.success(
-                    "Weekly course requirements confirmed!"
+                st.write(
+                    "Select suitable laboratories for each "
+                    "course and section."
                 )
 
-                st.download_button(
-                    "Download Weekly Requirements",
-                    data=requirements_df.to_csv(
-                        index=False
-                    ).encode("utf-8"),
-                    file_name="WEEKLY_COURSE_REQUIREMENTS.csv",
-                    mime="text/csv"
+                st.info(
+                    "All available laboratories are selected "
+                    "by default, matching the notebook logic."
                 )
 
-                # ---------------------------------------------
-                # NEXT STAGE INDICATOR
-                # ---------------------------------------------
-                if st.session_state.get(
-                    "course_requirements_confirmed",
-                    False
+                # -------------------------------------------------
+                # 7. LAB ELIGIBILITY SELECTION
+                # -------------------------------------------------
+
+                existing_mapping = st.session_state.get(
+                    "lab_eligibility_mapping",
+                    {}
+                )
+
+                current_lab_mapping = {}
+
+                for _, requirement in LAB_REQUIREMENTS.iterrows():
+
+                    requirement_id = (
+                        requirement["Requirement_ID"]
+                    )
+
+                    section_id = requirement["Section_ID"]
+
+                    course_code = requirement["Course_Code"]
+
+                    course_title = requirement["Course_Title"]
+
+                    requirement_label = (
+                        f"{requirement['Programme']} | "
+                        f"Semester {requirement['Semester']} | "
+                        f"Section {requirement['Section']} | "
+                        f"{course_code} — {course_title}"
+                    )
+
+                    st.markdown(
+                        f"**{requirement_label}**"
+                    )
+
+                    st.caption(
+                        "One weekly laboratory session — "
+                        "2 consecutive periods."
+                    )
+
+                    previous_labs = existing_mapping.get(
+                        requirement_id,
+                        available_labs
+                    )
+
+                    previous_labs = [
+                        lab
+                        for lab in previous_labs
+                        if lab in available_labs
+                    ]
+
+                    selected_labs = st.multiselect(
+                        "Suitable laboratories",
+                        options=available_labs,
+                        default=previous_labs,
+                        key=f"lab_eligibility_{requirement_id}"
+                    )
+
+                    current_lab_mapping[
+                        requirement_id
+                    ] = selected_labs
+
+                # -------------------------------------------------
+                # 8. CONFIRM LAB ELIGIBILITY
+                # -------------------------------------------------
+
+                if st.button(
+                    "Confirm Laboratory Eligibility",
+                    type="primary",
+                    use_container_width=True
                 ):
-        
-                    st.success(
-                        "Course requirements are ready for "
-                        "scheduling session generation."
-                    )
-        
-                    st.info(
-                        """
-                        Next stage:
-        
-                        1. Generate individual theory sessions.
-                        2. Generate two-period laboratory blocks.
-                        3. Create section-specific scheduling tasks.
-                        4. Determine faculty candidate lists.
-                        5. Construct the scheduling conflict graph.
-                        """
-                    )
-                            # =================================================
+
+                    validation_errors = []
+
+                    mapping_records = []
+
+                    for _, requirement in (
+                        LAB_REQUIREMENTS.iterrows()
+                    ):
+
+                        requirement_id = (
+                            requirement["Requirement_ID"]
+                        )
+
+                        selected_labs = (
+                            current_lab_mapping.get(
+                                requirement_id,
+                                []
+                            )
+                        )
+
+                        if not selected_labs:
+
+                            validation_errors.append(
+                                f"No suitable laboratory selected for "
+                                f"{requirement['Course_Title']} "
+                                f"({requirement['Section']})."
+                            )
+
+                            continue
+
+                        for lab in selected_labs:
+
+                            mapping_records.append({
+
+                                "Requirement_ID": requirement_id,
+
+                                "Section_ID": requirement["Section_ID"],
+
+                                "Programme": requirement["Programme"],
+
+                                "Semester": requirement["Semester"],
+
+                                "Section": requirement["Section"],
+
+                                "Course_Code": requirement["Course_Code"],
+
+                                "Course_Title": requirement["Course_Title"],
+
+                                "Matching_Subject": requirement[
+                                    "Matching_Subject"
+                                ],
+
+                                "Laboratory": lab,
+
+                                "Periods_Required": 2,
+
+                                "Consecutive": True
+
+                            })
+
+                    if validation_errors:
+
+                        st.error(
+                            "Laboratory eligibility is incomplete."
+                        )
+
+                        for error in validation_errors:
+                            st.write("❌", error)
+
+                        st.session_state.lab_configuration_confirmed = False
+
+                    else:
+
+                        LAB_ELIGIBILITY_MAPPING = pd.DataFrame(
+                            mapping_records
+                        )
+
+                        st.session_state.lab_eligibility_mapping = (
+                            LAB_ELIGIBILITY_MAPPING.copy()
+                        )
+
+                        st.session_state.lab_configuration_confirmed = True
+
+                        st.session_state.config[
+                            "lab_requirements"
+                        ] = LAB_REQUIREMENTS.to_dict(
+                            orient="records"
+                        )
+
+                        st.session_state.config[
+                            "lab_eligibility_mapping"
+                        ] = mapping_records
+
+                        st.success(
+                            "Laboratory eligibility confirmed successfully!"
+                        )
+
+                        st.metric(
+                            "Lab Course–Section Requirements",
+                            len(LAB_REQUIREMENTS)
+                        )
+
+                        st.metric(
+                            "Suitable Lab Combinations",
+                            len(LAB_ELIGIBILITY_MAPPING)
+                        )
+
+                        st.subheader(
+                            "Confirmed Laboratory Eligibility"
+                        )
+
+                        st.dataframe(
+                            LAB_ELIGIBILITY_MAPPING,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                        st.download_button(
+                            "Download Laboratory Eligibility Mapping",
+                            data=LAB_ELIGIBILITY_MAPPING.to_csv(
+                                index=False
+                            ).encode("utf-8"),
+                            file_name="LAB_ELIGIBILITY_MAPPING.csv",
+                            mime="text/csv"
+                        )
+        # =================================================
         # SECTION GENERATION & FIXED CLASSROOM ALLOCATION
         # =================================================
 
