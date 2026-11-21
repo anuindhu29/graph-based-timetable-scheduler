@@ -1635,9 +1635,10 @@ elif page == "8. Generate Timetable":
 
             st.stop()
 
-       # =============================================
+        # =============================================
         # WORKFLOW PROGRESS
         # =============================================
+
         st.markdown("### Workflow Progress")
 
         workflow_stages = [
@@ -1650,20 +1651,34 @@ elif page == "8. Generate Timetable":
             "Validation & Export"
         ]
 
-        current_stage = st.session_state.get(
-            "workflow_stage", 0
-        )
+        if st.session_state.get(
+            "scheduling_dataset_confirmed", False
+        ):
+            current_stage = 1
+        else:
+            current_stage = 0
+
+        if st.session_state.get(
+            "scheduling_domains", None
+        ) is not None:
+            current_stage = max(current_stage, 2)
 
         progress_value = (
-            current_stage + 1
-        ) / len(workflow_stages)
+            current_stage / len(workflow_stages)
+        )
 
         st.progress(progress_value)
 
         st.caption(
-            f"Stage {current_stage + 1} of "
-            f"{len(workflow_stages)}: "
-            f"{workflow_stages[current_stage]}"
+            f"Completed {current_stage} of "
+            f"{len(workflow_stages)} stages"
+        )
+
+        st.write(
+            "➡️ Current Stage:",
+            workflow_stages[
+                min(current_stage, len(workflow_stages) - 1)
+            ]
         )
 
         st.divider()
