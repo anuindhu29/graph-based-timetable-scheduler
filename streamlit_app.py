@@ -4593,7 +4593,9 @@ elif page == "8. Generate Timetable":
                         NO_CLASSROOM_SESSIONS.copy()
                     )
 
-                    st.session_state.scheduling_dataset_confirmed = False
+                    st.session_state.setdefault("scheduling_dataset_confirmed",
+                        False
+                    )
 
                     st.session_state.config[
                         "scheduling_sessions"
@@ -5464,14 +5466,31 @@ elif page == "8. Generate Timetable":
                     edge_index
                 )
             
+                source_data = GRAPH_VERTICES[source]
+                target_data = GRAPH_VERTICES[target]
+                
                 edge_hover.append(
-            
-                    f"<b>SECTION CONFLICT</b><br>"
-                    f"{source} ↔ {target}<br>"
-                    f"Section: {edge['Section_ID']}<br>"
-                    f"Click to inspect conflict"
+                
+                    f"<b>⚠ FIXED TIMETABLE CONFLICT</b><br><br>"
+                
+                    f"<b>Session A:</b> {source}<br>"
+                    f"<b>Subject:</b> {source_data['Course_Title']}<br>"
+                    f"<b>Course Code:</b> {source_data['Course_Code']}<br><br>"
+                
+                    f"<b>Session B:</b> {target}<br>"
+                    f"<b>Subject:</b> {target_data['Course_Title']}<br>"
+                    f"<b>Course Code:</b> {target_data['Course_Code']}<br><br>"
+                
+                    f"<b>Conflict Reason:</b> Same student section<br>"
+                    f"<b>Section:</b> {edge['Section_ID']}<br>"
+                
+                    f"<b>Constraint Violated:</b> "
+                    f"These sessions cannot be scheduled "
+                    f"at the same time.<br><br>"
+                
+                    f"<b>Click the edge to view full conflict details</b>"
                 )
-            
+                            
             
             # ------------------------------------------------------------
             # 10. PREPARE NODE DATA
