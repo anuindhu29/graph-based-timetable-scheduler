@@ -4076,6 +4076,37 @@ elif page == "8. Generate Timetable":
                             == section_semester_normalized
                         )
                     ].copy()
+                    
+                    # ---------------------------------------------
+                    # NOTEBOOK COURSE EXCLUSION RULES
+                    # ---------------------------------------------
+                    
+                    EXCLUSION_KEYWORDS = [
+                        "summer internship",
+                        "internship",
+                        "industrial training",
+                        "academic attachment",
+                        "project work",
+                        "comprehensive viva",
+                        "industrial lecture",
+                        "online course",
+                        "online courses",
+                        "nptel"
+                    ]
+                    
+                    def is_excluded_course(course_title):
+                    
+                        title = str(course_title).strip().lower()
+                    
+                        return any(
+                            keyword in title
+                            for keyword in EXCLUSION_KEYWORDS
+                        )
+                    
+                    section_courses = section_courses[
+                        ~section_courses[course_title_col]
+                        .apply(is_excluded_course)
+                    ].copy()
 
                     # -----------------------------------------
                     # FIXED CLASSROOM FOR SECTION
