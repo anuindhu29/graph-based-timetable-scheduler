@@ -6405,7 +6405,7 @@ elif page == "9. CP-SAT Timetable Solver":
         # -------------------------------------------------
 
         if st.button(
-            "🚀 Generate Timetable using CP-SAT",
+            "Generate Timetable using CP-SAT")
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
 # =========================================================
