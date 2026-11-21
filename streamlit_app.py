@@ -51,7 +51,7 @@ page = st.sidebar.radio(
         "5. Upload & Retrieve Files",
         "6. Faculty Constraints & HOD Approval",
         "7. Classroom & Laboratory Configuration",
-        "8. Generate Timetable"
+        "8. Generate Timetable",
         "9. CP-SAT Timetable Solver"
     ]
 )
