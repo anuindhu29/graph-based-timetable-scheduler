@@ -109,7 +109,6 @@ if page == "1. Programme Configuration":
         value=2,
         key="mtech_sections"
     )
-
     if semester_type == "Odd":
         mtech_semesters = [1, 3]
     else:
