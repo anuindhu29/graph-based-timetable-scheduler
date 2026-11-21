@@ -4246,11 +4246,48 @@ elif page == "8. Generate Timetable":
                 )
 
                 if SCHEDULING_SESSIONS.empty:
-
-                    st.error(
-                        "No scheduling sessions were generated. "
-                        "Check curriculum and section configuration."
+                
+                    st.error("No scheduling sessions were generated.")
+                
+                    st.subheader("Debug Information")
+                
+                    st.write("Curriculum shape:",
+                             CURRICULUM_FOR_SCHEDULING.shape)
+                
+                    st.write("Curriculum columns:",
+                             list(CURRICULUM_FOR_SCHEDULING.columns))
+                
+                    st.write("Sections shape:",
+                             SECTION_LIST.shape)
+                
+                    st.write("Sections:")
+                    st.dataframe(SECTION_LIST)
+                
+                    st.write("Programme values in curriculum:")
+                    st.write(
+                        CURRICULUM_FOR_SCHEDULING[programme_col]
+                        .unique().tolist()
                     )
+                
+                    st.write("Semester values in curriculum:")
+                    st.write(
+                        CURRICULUM_FOR_SCHEDULING[semester_col]
+                        .unique().tolist()
+                    )
+                
+                    st.write("Programme values in sections:")
+                    st.write(
+                        SECTION_LIST["Programme"]
+                        .unique().tolist()
+                    )
+                
+                    st.write("Semester values in sections:")
+                    st.write(
+                        SECTION_LIST["Semester"]
+                        .unique().tolist()
+                    )
+                
+                    st.stop()
 
                 else:
 
