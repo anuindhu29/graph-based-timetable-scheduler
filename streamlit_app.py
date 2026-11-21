@@ -4632,7 +4632,466 @@ elif page == "8. Generate Timetable":
                         file_name="SCHEDULING_SESSIONS.csv",
                         mime="text/csv"
                     )
-       
+               # =========================================================
+        # CELL 20: SCHEDULING VARIABLES & DOMAIN GENERATION
+        # =========================================================
+
+        st.divider()
+        st.subheader("Scheduling Variables & Domain Generation")
+
+        if not st.session_state.get(
+            "scheduling_dataset_confirmed", False
+        ):
+            st.warning("Confirm the scheduling dataset first.")
+
+        else:
+
+            SCHEDULING_SESSIONS = (
+                st.session_state.scheduling_sessions.copy()
+            )
+
+            VALID_PERIODS = st.session_state.valid_periods.copy()
+
+            FACULTY_AVAILABILITY = (
+                st.session_state.faculty_availability.copy()
+            )
+
+            SECTION_CLASSROOM_MAPPING = (
+                st.session_state.section_classroom_mapping_df.copy()
+            )
+
+            LAB_ELIGIBILITY_MAPPING = (
+                st.session_state.lab_eligibility_mapping.copy()
+            )
+
+            # -------------------------------------------------
+            # 1. PREPARE PERIODS BY DAY
+            # -------------------------------------------------
+
+            periods_by_day = {}
+
+            for _, period in VALID_PERIODS.iterrows():
+
+                day = str(period["Day"])
+
+                periods_by_day.setdefault(day, []).append(
+                    period.to_dict()
+                )
+
+            for day in periods_by_day:
+
+                periods_by_day[day].sort(
+                    key=lambda x: (
+                        x["Period"],
+                        x["Start_Time"]
+                    )
+                )
+
+            # -------------------------------------------------
+            # 2. FACULTY AVAILABILITY LOOKUP
+            # -------------------------------------------------
+
+            availability_lookup = {}
+
+            for _, row in FACULTY_AVAILABILITY.iterrows():
+
+                key = (
+                    str(row["Faculty_ID"]).strip(),
+                    str(row["Day"]).strip(),
+                    str(row["Start_Time"]).strip(),
+                    str(row["End_Time"]).strip()
+                )
+
+                availability_lookup[key] = bool(
+                    row["Available"]
+                )
+
+            def faculty_available_for_period(
+                faculty_id,
+                day,
+                start_time,
+                end_time
+            ):
+
+                key = (
+                    str(faculty_id).strip(),
+                    str(day).strip(),
+                    str(start_time).strip(),
+                    str(end_time).strip()
+                )
+
+                return availability_lookup.get(key, False)
+
+            # -------------------------------------------------
+            # 3. GENERATE TWO-PERIOD LAB BLOCKS
+            # -------------------------------------------------
+
+            LAB_PERIOD_BLOCKS = []
+
+            for day, periods in periods_by_day.items():
+
+                for index in range(len(periods) - 1):
+
+                    first = periods[index]
+                    second = periods[index + 1]
+
+                    if first["End_Time"] != second["Start_Time"]:
+                        continue
+
+                    LAB_PERIOD_BLOCKS.append({
+
+                        "Day": day,
+
+                        "Period_1": first["Period"],
+                        "Period_2": second["Period"],
+
+                        "Start_Time": first["Start_Time"],
+                        "End_Time": second["End_Time"],
+
+                        "Periods": [
+                            first["Period"],
+                            second["Period"]
+                        ]
+                    })
+
+            # -------------------------------------------------
+            # 4. RESOURCE OPTIONS
+            # -------------------------------------------------
+
+            def get_session_resources(session):
+
+                if session["Session_Type"] == "Theory":
+
+                    classroom = session["Fixed_Classroom"]
+
+                    if pd.isna(classroom):
+                        return []
+
+                    return [str(classroom)]
+
+                elif session["Session_Type"] == "Laboratory":
+
+                    return [
+                        str(lab)
+                        for lab in session["Candidate_Labs"]
+                        if pd.notna(lab)
+                    ]
+
+                return []
+
+            # -------------------------------------------------
+            # 5. GENERATE DOMAINS
+            # -------------------------------------------------
+
+            SCHEDULING_DOMAINS = {}
+            DOMAIN_RECORDS = []
+            DOMAIN_SUMMARY = []
+
+            for _, session in SCHEDULING_SESSIONS.iterrows():
+
+                session_id = str(session["Session_ID"])
+
+                session_type = str(session["Session_Type"])
+
+                eligible_faculty = [
+                    str(fid).strip()
+                    for fid in session["Eligible_Faculty"]
+                ]
+
+                candidate_resources = (
+                    get_session_resources(session)
+                )
+
+                domain = []
+
+                # THEORY: ONE PERIOD
+                if session_type == "Theory":
+
+                    for day, periods in periods_by_day.items():
+
+                        for period in periods:
+
+                            for faculty_id in eligible_faculty:
+
+                                if not faculty_available_for_period(
+                                    faculty_id,
+                                    day,
+                                    period["Start_Time"],
+                                    period["End_Time"]
+                                ):
+                                    continue
+
+                                for resource in candidate_resources:
+
+                                    domain.append({
+
+                                        "Session_ID": session_id,
+                                        "Faculty_ID": faculty_id,
+                                        "Day": day,
+
+                                        "Start_Period": period["Period"],
+                                        "End_Period": period["Period"],
+
+                                        "Start_Time": period["Start_Time"],
+                                        "End_Time": period["End_Time"],
+
+                                        "Periods": [period["Period"]],
+
+                                        "Resource": resource,
+                                        "Resource_Type": "Classroom"
+                                    })
+
+                # LAB: TWO CONSECUTIVE PERIODS
+                elif session_type == "Laboratory":
+
+                    for block in LAB_PERIOD_BLOCKS:
+
+                        for faculty_id in eligible_faculty:
+
+                            day_periods = periods_by_day[
+                                block["Day"]
+                            ]
+
+                            first_period = next(
+                                p for p in day_periods
+                                if p["Period"] == block["Period_1"]
+                            )
+
+                            second_period = next(
+                                p for p in day_periods
+                                if p["Period"] == block["Period_2"]
+                            )
+
+                            first_available = (
+                                faculty_available_for_period(
+                                    faculty_id,
+                                    block["Day"],
+                                    first_period["Start_Time"],
+                                    first_period["End_Time"]
+                                )
+                            )
+
+                            second_available = (
+                                faculty_available_for_period(
+                                    faculty_id,
+                                    block["Day"],
+                                    second_period["Start_Time"],
+                                    second_period["End_Time"]
+                                )
+                            )
+
+                            if not (
+                                first_available
+                                and second_available
+                            ):
+                                continue
+
+                            for resource in candidate_resources:
+
+                                domain.append({
+
+                                    "Session_ID": session_id,
+                                    "Faculty_ID": faculty_id,
+                                    "Day": block["Day"],
+
+                                    "Start_Period": block["Period_1"],
+                                    "End_Period": block["Period_2"],
+
+                                    "Start_Time": block["Start_Time"],
+                                    "End_Time": block["End_Time"],
+
+                                    "Periods": block["Periods"],
+
+                                    "Resource": resource,
+                                    "Resource_Type": "Laboratory"
+                                })
+
+                SCHEDULING_DOMAINS[session_id] = domain
+
+                DOMAIN_RECORDS.extend(domain)
+
+                DOMAIN_SUMMARY.append({
+
+                    "Session_ID": session_id,
+                    "Course_Title": session["Course_Title"],
+                    "Session_Type": session_type,
+                    "Section_ID": session["Section_ID"],
+
+                    "Eligible_Faculty_Count": (
+                        len(eligible_faculty)
+                    ),
+
+                    "Candidate_Resource_Count": (
+                        len(candidate_resources)
+                    ),
+
+                    "Domain_Size": len(domain),
+
+                    "Domain_Status": (
+                        "Valid Options Available"
+                        if domain
+                        else "Empty Domain"
+                    )
+                })
+
+            # -------------------------------------------------
+            # 6. DOMAIN DATAFRAMES
+            # -------------------------------------------------
+
+            DOMAIN_DATAFRAME = pd.DataFrame(
+                DOMAIN_RECORDS
+            )
+
+            DOMAIN_SUMMARY_DF = pd.DataFrame(
+                DOMAIN_SUMMARY
+            )
+
+            EMPTY_DOMAIN_SESSIONS = (
+                DOMAIN_SUMMARY_DF[
+                    DOMAIN_SUMMARY_DF["Domain_Size"] == 0
+                ].copy()
+            )
+
+            # -------------------------------------------------
+            # 7. SUMMARY
+            # -------------------------------------------------
+
+            total_sessions = len(
+                SCHEDULING_SESSIONS
+            )
+
+            sessions_with_options = (
+                DOMAIN_SUMMARY_DF["Domain_Size"] > 0
+            ).sum()
+
+            total_domain_options = len(
+                DOMAIN_RECORDS
+            )
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            col1.metric(
+                "Scheduling Variables",
+                total_sessions
+            )
+
+            col2.metric(
+                "Sessions with Options",
+                int(sessions_with_options)
+            )
+
+            col3.metric(
+                "Assignment Combinations",
+                total_domain_options
+            )
+
+            col4.metric(
+                "Empty Domains",
+                len(EMPTY_DOMAIN_SESSIONS)
+            )
+
+            st.subheader("Domain Summary")
+
+            st.dataframe(
+                DOMAIN_SUMMARY_DF,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # -------------------------------------------------
+            # 8. EMPTY DOMAIN CHECK
+            # -------------------------------------------------
+
+            if not EMPTY_DOMAIN_SESSIONS.empty:
+
+                st.error(
+                    "Some scheduling sessions have no valid assignments."
+                )
+
+                st.dataframe(
+                    EMPTY_DOMAIN_SESSIONS,
+                    use_container_width=True
+                )
+
+            else:
+
+                st.success(
+                    "Every scheduling session has valid assignment options."
+                )
+
+            # -------------------------------------------------
+            # 9. REVIEW ASSIGNMENT OPTIONS
+            # -------------------------------------------------
+
+            with st.expander(
+                "View All Candidate Assignment Options"
+            ):
+
+                st.dataframe(
+                    DOMAIN_DATAFRAME,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            # -------------------------------------------------
+            # 10. SAVE TO SESSION STATE
+            # -------------------------------------------------
+
+            st.session_state.scheduling_domains = (
+                SCHEDULING_DOMAINS
+            )
+
+            st.session_state.domain_dataframe = (
+                DOMAIN_DATAFRAME
+            )
+
+            st.session_state.domain_summary_df = (
+                DOMAIN_SUMMARY_DF
+            )
+
+            st.session_state.empty_domain_sessions = (
+                EMPTY_DOMAIN_SESSIONS
+            )
+
+            st.session_state.scheduling_domains_confirmed = False
+
+            # -------------------------------------------------
+            # 11. CONFIRM DOMAINS
+            # -------------------------------------------------
+
+            if st.button(
+                "Confirm Scheduling Domains",
+                type="primary",
+                use_container_width=True
+            ):
+
+                if not EMPTY_DOMAIN_SESSIONS.empty:
+
+                    st.session_state.scheduling_domains_confirmed = False
+
+                    st.error(
+                        "Cannot confirm: empty domains exist."
+                    )
+
+                else:
+
+                    st.session_state.scheduling_domains_confirmed = True
+
+                    st.session_state.config[
+                        "scheduling_domains_summary"
+                    ] = DOMAIN_SUMMARY_DF.to_dict(
+                        orient="records"
+                    )
+
+                    st.session_state.config[
+                        "scheduling_domains"
+                    ] = SCHEDULING_DOMAINS
+
+                    st.success(
+                        "Scheduling domains confirmed successfully!"
+                    )
+
+                    st.rerun()
 # =========================================================
 # FOOTER
 # =========================================================
