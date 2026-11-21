@@ -4761,16 +4761,6 @@ elif page == "8. Generate Timetable":
                 "Confirm the scheduling dataset first."
             )
 
-        elif st.session_state.get(
-            "workflow_stage", 0
-        ) < 1:
-
-            st.info(
-                "Session Generation completed. "
-                "Click 'Continue to Scheduling Domains' "
-                "above to proceed."
-            )
-
         else:
 
             SCHEDULING_SESSIONS = (
