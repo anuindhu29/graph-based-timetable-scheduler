@@ -7017,13 +7017,13 @@ elif page == "11. Download Timetable PDF":
 
     st.header("📄 Download Timetable PDF")
     st.caption(
-        "Generate formal timetable PDFs for sections, faculty, "
-        "and laboratories."
+        "Download individual timetables or combined PDFs "
+        "for all sections, faculty, and laboratories."
     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # CHECK GENERATED TIMETABLE
-    # -----------------------------------------------------
+    # =====================================================
 
     if (
         "generated_timetable" not in st.session_state
@@ -7031,25 +7031,18 @@ elif page == "11. Download Timetable PDF":
         or st.session_state.generated_timetable.empty
     ):
 
-        st.warning(
-            "Please generate the timetable using CP-SAT first."
-        )
+        st.warning("Generate the timetable using CP-SAT first.")
 
     else:
 
-        timetable_df = st.session_state.generated_timetable.copy()
-
-        # -------------------------------------------------
-        # IMPORTS
-        # -------------------------------------------------
-
         import io
+        import re
         import pandas as pd
 
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import landscape, A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.enums import TA_CENTER
         from reportlab.lib.units import mm
 
         from reportlab.platypus import (
@@ -7057,23 +7050,29 @@ elif page == "11. Download Timetable PDF":
             Table,
             TableStyle,
             Paragraph,
-            Spacer
+            Spacer,
+            PageBreak
         )
 
-        # -------------------------------------------------
-        # COLOR CONFIGURATION
-        # -------------------------------------------------
+        from pypdf import PdfReader, PdfWriter
+
+        timetable_df = st.session_state.generated_timetable.copy()
+
+        # =================================================
+        # COLORS
+        # =================================================
 
         MAROON = colors.HexColor("#8F3B2E")
+        DARK_MAROON = colors.HexColor("#762F25")
         LIGHT_PEACH = colors.HexColor("#F3E5E0")
         BREAK_PEACH = colors.HexColor("#E8D7D1")
         WHITE = colors.white
         BLACK = colors.black
-        DARK_MAROON = colors.HexColor("#7A3026")
+        GRID = colors.HexColor("#999999")
 
-        # -------------------------------------------------
-        # SAFE TEXT FUNCTION
-        # -------------------------------------------------
+        # =================================================
+        # SAFE TEXT
+        # =================================================
 
         def pdf_txt(value):
 
@@ -7096,151 +7095,100 @@ elif page == "11. Download Timetable PDF":
 
             return str(value).strip()
 
-        # -------------------------------------------------
+        # =================================================
         # COLUMN DETECTION
-        # -------------------------------------------------
+        # =================================================
 
-        def find_column(df, possible_names):
+        def find_col(possible_names):
 
             for name in possible_names:
 
-                if name in df.columns:
+                if name in timetable_df.columns:
                     return name
 
             return None
 
-        day_col = find_column(
-            timetable_df,
-            ["Day", "DAY", "day"]
-        )
+        day_col = find_col([
+            "Day", "DAY", "day"
+        ])
 
-        subject_col = find_column(
-            timetable_df,
-            [
-                "Subject_Code",
-                "Subject Code",
-                "Course_Code",
-                "Course Code",
-                "Code",
-                "Subject",
-                "Course"
-            ]
-        )
+        subject_col = find_col([
+            "Subject_Code",
+            "Subject Code",
+            "Course_Code",
+            "Course Code",
+            "Code",
+            "Subject",
+            "Course"
+        ])
 
-        subject_name_col = find_column(
-            timetable_df,
-            [
-                "Subject_Name",
-                "Subject Name",
-                "Course_Name",
-                "Course Name",
-                "Course_Title",
-                "Subject"
-            ]
-        )
+        subject_name_col = find_col([
+            "Subject_Name",
+            "Subject Name",
+            "Course_Name",
+            "Course Name",
+            "Course_Title",
+            "Course Title"
+        ])
 
-        section_col = find_column(
-            timetable_df,
-            [
-                "Section_ID",
-                "Section",
-                "SECTION",
-                "Class",
-                "Class_ID"
-            ]
-        )
+        section_col = find_col([
+            "Section_ID",
+            "Section",
+            "SECTION",
+            "Class",
+            "Class_ID"
+        ])
 
-        faculty_col = find_column(
-            timetable_df,
-            [
-                "Faculty",
-                "Faculty_Name",
-                "Faculty Name",
-                "Faculty_ID",
-                "Faculty_Id",
-                "Instructor"
-            ]
-        )
+        faculty_col = find_col([
+            "Faculty",
+            "Faculty_Name",
+            "Faculty Name",
+            "Instructor",
+            "Faculty_ID",
+            "Faculty_Id"
+        ])
 
-        faculty_id_col = find_column(
-            timetable_df,
-            [
-                "Faculty_ID",
-                "Faculty_Id",
-                "Faculty ID"
-            ]
-        )
+        faculty_id_col = find_col([
+            "Faculty_ID",
+            "Faculty_Id",
+            "Faculty ID"
+        ])
 
-        resource_col = find_column(
-            timetable_df,
-            [
-                "Resource",
-                "Room",
-                "Room_ID",
-                "Laboratory",
-                "Lab"
-            ]
-        )
+        resource_col = find_col([
+            "Resource",
+            "Room",
+            "Room_ID",
+            "Laboratory",
+            "Lab"
+        ])
 
-        resource_type_col = find_column(
-            timetable_df,
-            [
-                "Resource_Type",
-                "Resource Type",
-                "Room_Type",
-                "Type"
-            ]
-        )
+        resource_type_col = find_col([
+            "Resource_Type",
+            "Resource Type",
+            "Room_Type"
+        ])
 
-        session_type_col = find_column(
-            timetable_df,
-            [
-                "Session_Type",
-                "Session Type",
-                "Type"
-            ]
-        )
+        session_type_col = find_col([
+            "Session_Type",
+            "Session Type"
+        ])
 
-        start_period_col = find_column(
-            timetable_df,
-            [
-                "Start_Period",
-                "Start Period",
-                "Period",
-                "Period_No"
-            ]
-        )
+        start_period_col = find_col([
+            "Start_Period",
+            "Start Period",
+            "Period",
+            "Period_No"
+        ])
 
-        periods_col = find_column(
-            timetable_df,
-            [
-                "Periods",
-                "Period_List",
-                "Period Numbers"
-            ]
-        )
+        periods_col = find_col([
+            "Periods",
+            "Period_List",
+            "Period Numbers"
+        ])
 
-        start_time_col = find_column(
-            timetable_df,
-            [
-                "Start_Time",
-                "Start Time",
-                "Start"
-            ]
-        )
-
-        end_time_col = find_column(
-            timetable_df,
-            [
-                "End_Time",
-                "End Time",
-                "End"
-            ]
-        )
-
-        # -------------------------------------------------
-        # DAYS AND PERIODS
-        # -------------------------------------------------
+        # =================================================
+        # WEEKDAYS
+        # =================================================
 
         DAYS = [
             "Monday",
@@ -7249,6 +7197,10 @@ elif page == "11. Download Timetable PDF":
             "Thursday",
             "Friday"
         ]
+
+        # =================================================
+        # PERIOD TIMINGS
+        # =================================================
 
         PERIODS = {
             1: ("08:30", "09:20"),
@@ -7261,31 +7213,25 @@ elif page == "11. Download Timetable PDF":
             8: ("16:10", "17:00")
         }
 
-        # Columns include breaks
-        TABLE_COLUMNS = [
-            "DAY",
-            "P1",
-            "P2",
-            "MORNING BREAK",
-            "P3",
-            "P4",
-            "LUNCH",
-            "P5",
-            "BREAK",
-            "P6",
-            "P7",
-            "P8"
-        ]
+        PERIOD_COLUMN = {
+            1: 1,
+            2: 2,
+            3: 4,
+            4: 5,
+            5: 7,
+            6: 9,
+            7: 10,
+            8: 11
+        }
 
-        # -------------------------------------------------
+        # =================================================
         # PERIOD EXTRACTION
-        # -------------------------------------------------
+        # =================================================
 
-        def get_period_numbers(row):
+        def get_periods(row):
 
             result = []
 
-            # First try Periods column
             if periods_col is not None:
 
                 value = row.get(periods_col)
@@ -7301,122 +7247,36 @@ elif page == "11. Download Timetable PDF":
 
                 else:
 
-                    text_value = pdf_txt(value)
+                    value = pdf_txt(value)
 
-                    if text_value:
-
-                        import re
+                    if value:
 
                         numbers = re.findall(
                             r"\d+",
-                            text_value
+                            value
                         )
 
                         result.extend(
-                            int(n)
-                            for n in numbers
+                            int(x)
+                            for x in numbers
                         )
 
-            # Otherwise use Start_Period
             if not result and start_period_col is not None:
 
                 try:
 
-                    start_period = int(
-                        float(row.get(start_period_col))
+                    result.append(
+                        int(float(row.get(start_period_col)))
                     )
-
-                    result.append(start_period)
 
                 except Exception:
                     pass
 
-            # Remove duplicates
-            result = sorted(set(result))
+            return sorted(set(result))
 
-            return result
-
-        # -------------------------------------------------
-        # SUBJECT DISPLAY
-        # -------------------------------------------------
-
-        def get_subject_display(row):
-
-            code = (
-                pdf_txt(row.get(subject_col))
-                if subject_col is not None
-                else ""
-            )
-
-            name = (
-                pdf_txt(row.get(subject_name_col))
-                if subject_name_col is not None
-                else ""
-            )
-
-            if code and name and code != name:
-
-                return f"{code}<br/><font size='7'>{name}</font>"
-
-            if code:
-                return code
-
-            if name:
-                return name
-
-            return "SESSION"
-
-        # -------------------------------------------------
-        # SESSION DETAILS
-        # -------------------------------------------------
-
-        def get_session_details(row):
-
-            subject_code = (
-                pdf_txt(row.get(subject_col))
-                if subject_col is not None
-                else ""
-            )
-
-            subject_name = (
-                pdf_txt(row.get(subject_name_col))
-                if subject_name_col is not None
-                else ""
-            )
-
-            faculty = (
-                pdf_txt(row.get(faculty_col))
-                if faculty_col is not None
-                else ""
-            )
-
-            faculty_id = (
-                pdf_txt(row.get(faculty_id_col))
-                if faculty_id_col is not None
-                else ""
-            )
-
-            resource = (
-                pdf_txt(row.get(resource_col))
-                if resource_col is not None
-                else ""
-            )
-
-            if faculty_id and faculty and faculty_id != faculty:
-                faculty_display = f"{faculty} ({faculty_id})"
-            else:
-                faculty_display = faculty or faculty_id
-
-            return {
-                "code": subject_code,
-                "name": subject_name,
-                "faculty": faculty_display,
-                "resource": resource
-            }
-
-        # -------------------------------------------------
-        # GET DAY
-        # -------------------------------------------------
+        # =================================================
+        # DAY NORMALIZATION
+        # =================================================
 
         def normalize_day(value):
 
@@ -7429,11 +7289,130 @@ elif page == "11. Download Timetable PDF":
 
             return value
 
-        # -------------------------------------------------
-        # GET ROWS FOR SELECTED ENTITY
-        # -------------------------------------------------
+        # =================================================
+        # SUBJECT DISPLAY
+        # =================================================
 
-        def get_entity_df(entity_type, selected_entity):
+        def subject_display(row):
+
+            code = (
+                pdf_txt(row.get(subject_col))
+                if subject_col
+                else ""
+            )
+
+            name = (
+                pdf_txt(row.get(subject_name_col))
+                if subject_name_col
+                else ""
+            )
+
+            if code and name and code != name:
+
+                return (
+                    f"<b>{code}</b><br/>"
+                    f"<font size='7'>{name}</font>"
+                )
+
+            return code or name or "SESSION"
+
+        # =================================================
+        # ALLOCATION DETAILS
+        # =================================================
+
+        def allocation_details(row):
+
+            code = (
+                pdf_txt(row.get(subject_col))
+                if subject_col
+                else ""
+            )
+
+            name = (
+                pdf_txt(row.get(subject_name_col))
+                if subject_name_col
+                else ""
+            )
+
+            faculty = (
+                pdf_txt(row.get(faculty_col))
+                if faculty_col
+                else ""
+            )
+
+            faculty_id = (
+                pdf_txt(row.get(faculty_id_col))
+                if faculty_id_col
+                else ""
+            )
+
+            resource = (
+                pdf_txt(row.get(resource_col))
+                if resource_col
+                else ""
+            )
+
+            if faculty and faculty_id and faculty != faculty_id:
+                faculty_display = f"{faculty} ({faculty_id})"
+            else:
+                faculty_display = faculty or faculty_id
+
+            return code, name, faculty_display, resource
+
+        # =================================================
+        # LAB IDENTIFICATION
+        # =================================================
+
+        def get_lab_mask(df):
+
+            mask = pd.Series(
+                False,
+                index=df.index
+            )
+
+            if resource_col is not None:
+
+                mask |= (
+                    df[resource_col]
+                    .astype(str)
+                    .str.contains(
+                        "Lab",
+                        case=False,
+                        na=False
+                    )
+                )
+
+            if resource_type_col is not None:
+
+                mask |= (
+                    df[resource_type_col]
+                    .astype(str)
+                    .str.contains(
+                        "Lab",
+                        case=False,
+                        na=False
+                    )
+                )
+
+            if session_type_col is not None:
+
+                mask |= (
+                    df[session_type_col]
+                    .astype(str)
+                    .str.contains(
+                        "Lab",
+                        case=False,
+                        na=False
+                    )
+                )
+
+            return mask
+
+        # =================================================
+        # FILTER ENTITY
+        # =================================================
+
+        def filter_entity(entity_type, entity):
 
             df = timetable_df.copy()
 
@@ -7445,7 +7424,7 @@ elif page == "11. Download Timetable PDF":
                 return df[
                     df[section_col]
                     .astype(str)
-                    == str(selected_entity)
+                    == str(entity)
                 ].copy()
 
             elif entity_type == "Faculty":
@@ -7455,15 +7434,15 @@ elif page == "11. Download Timetable PDF":
                     return df[
                         df[faculty_col]
                         .astype(str)
-                        == str(selected_entity)
+                        == str(entity)
                     ].copy()
 
-                if faculty_id_col is not None:
+                elif faculty_id_col is not None:
 
                     return df[
                         df[faculty_id_col]
                         .astype(str)
-                        == str(selected_entity)
+                        == str(entity)
                     ].copy()
 
             elif entity_type == "Laboratory":
@@ -7471,95 +7450,60 @@ elif page == "11. Download Timetable PDF":
                 if resource_col is None:
                     return pd.DataFrame()
 
-                lab_mask = (
-                    df[resource_col]
-                    .astype(str)
-                    .str.contains(
-                        "Lab",
-                        case=False,
-                        na=False
-                    )
-                )
-
-                if resource_type_col is not None:
-
-                    lab_mask |= (
-                        df[resource_type_col]
-                        .astype(str)
-                        .str.contains(
-                            "Lab",
-                            case=False,
-                            na=False
-                        )
-                    )
-
-                if session_type_col is not None:
-
-                    lab_mask |= (
-                        df[session_type_col]
-                        .astype(str)
-                        .str.contains(
-                            "Lab",
-                            case=False,
-                            na=False
-                        )
-                    )
-
-                df = df[lab_mask].copy()
+                df = df[get_lab_mask(df)].copy()
 
                 return df[
                     df[resource_col]
                     .astype(str)
-                    == str(selected_entity)
+                    == str(entity)
                 ].copy()
 
             return pd.DataFrame()
 
-        # -------------------------------------------------
-        # FORMAL TIMETABLE PDF GENERATOR
-        # -------------------------------------------------
+        # =================================================
+        # CREATE ONE TIMETABLE PAGE
+        # =================================================
 
-        def generate_timetable_pdf(
+        def create_timetable_page(
             entity_type,
-            selected_entity,
-            entity_df
+            entity_name,
+            entity_df,
+            story,
+            styles
         ):
 
-            pdf_buffer = io.BytesIO()
-
-            doc = SimpleDocTemplate(
-                pdf_buffer,
-                pagesize=landscape(A4),
-                rightMargin=8 * mm,
-                leftMargin=8 * mm,
-                topMargin=8 * mm,
-                bottomMargin=8 * mm
-            )
-
-            styles = getSampleStyleSheet()
-
             title_style = ParagraphStyle(
-                "TimetableTitle",
+                "PDFTitle",
                 parent=styles["Title"],
                 fontName="Helvetica-Bold",
                 fontSize=17,
-                textColor=DARK_MAROON,
                 alignment=TA_CENTER,
-                spaceAfter=5
+                textColor=DARK_MAROON,
+                spaceAfter=4
             )
 
             subtitle_style = ParagraphStyle(
-                "TimetableSubtitle",
+                "PDFSubtitle",
                 parent=styles["Normal"],
                 fontName="Helvetica-Bold",
-                fontSize=10,
-                textColor=DARK_MAROON,
+                fontSize=11,
                 alignment=TA_CENTER,
+                textColor=DARK_MAROON,
                 spaceAfter=8
             )
 
+            header_style = ParagraphStyle(
+                "PDFHeader",
+                parent=styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=7,
+                leading=8,
+                alignment=TA_CENTER,
+                textColor=WHITE
+            )
+
             cell_style = ParagraphStyle(
-                "TimetableCell",
+                "PDFCell",
                 parent=styles["Normal"],
                 fontName="Helvetica",
                 fontSize=7,
@@ -7568,41 +7512,14 @@ elif page == "11. Download Timetable PDF":
                 textColor=DARK_MAROON
             )
 
-            header_style = ParagraphStyle(
-                "TimetableHeader",
-                parent=styles["Normal"],
-                fontName="Helvetica-Bold",
-                fontSize=7,
-                leading=8,
-                alignment=TA_CENTER,
-                textColor=WHITE
-            )
-
-            allocation_header_style = ParagraphStyle(
-                "AllocationHeader",
-                parent=styles["Normal"],
-                fontName="Helvetica-Bold",
-                fontSize=8,
-                leading=9,
-                alignment=TA_CENTER,
-                textColor=WHITE
-            )
-
-            allocation_cell_style = ParagraphStyle(
-                "AllocationCell",
+            allocation_style = ParagraphStyle(
+                "PDFAllocation",
                 parent=styles["Normal"],
                 fontName="Helvetica",
                 fontSize=7,
                 leading=8,
-                alignment=TA_CENTER,
-                textColor=BLACK
+                alignment=TA_CENTER
             )
-
-            story = []
-
-            # -------------------------------------------------
-            # TITLE
-            # -------------------------------------------------
 
             story.append(
                 Paragraph(
@@ -7613,157 +7530,108 @@ elif page == "11. Download Timetable PDF":
 
             story.append(
                 Paragraph(
-                    f"{entity_type}: {selected_entity}",
+                    f"{entity_type}: {entity_name}",
                     subtitle_style
                 )
             )
 
-            story.append(Spacer(1, 4))
+            story.append(Spacer(1, 3))
 
             # -------------------------------------------------
-            # HEADER ROW
+            # HEADER
             # -------------------------------------------------
 
-            header_row = [
-                Paragraph("DAY", header_style)
+            header = [
+                Paragraph("DAY", header_style),
+                Paragraph(
+                    "<b>P1</b><br/>08:30-09:20",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>P2</b><br/>09:20-10:10",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>MORNING BREAK</b><br/>10:10-10:30",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>P3</b><br/>10:30-11:20",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>P4</b><br/>11:20-12:10",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>LUNCH</b><br/>12:10-13:30",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>P5</b><br/>13:30-14:20",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>BREAK</b><br/>14:20-14:30",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>P6</b><br/>14:30-15:20",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>P7</b><br/>15:20-16:10",
+                    header_style
+                ),
+                Paragraph(
+                    "<b>P8</b><br/>16:10-17:00",
+                    header_style
+                )
             ]
 
-            header_row.extend([
-                Paragraph(
-                    f"<b>P{p}</b><br/>{PERIODS[p][0]} - {PERIODS[p][1]}",
-                    header_style
-                )
-                for p in [1, 2]
-            ])
-
-            header_row.append(
-                Paragraph(
-                    "<b>MORNING BREAK</b><br/>10:10 - 10:30",
-                    header_style
-                )
-            )
-
-            header_row.extend([
-                Paragraph(
-                    f"<b>P{p}</b><br/>{PERIODS[p][0]} - {PERIODS[p][1]}",
-                    header_style
-                )
-                for p in [3, 4]
-            ])
-
-            header_row.append(
-                Paragraph(
-                    "<b>LUNCH</b><br/>12:10 - 13:30",
-                    header_style
-                )
-            )
-
-            header_row.append(
-                Paragraph(
-                    f"<b>P5</b><br/>{PERIODS[5][0]} - {PERIODS[5][1]}",
-                    header_style
-                )
-            )
-
-            header_row.append(
-                Paragraph(
-                    "<b>BREAK</b><br/>14:20 - 14:30",
-                    header_style
-                )
-            )
-
-            header_row.extend([
-                Paragraph(
-                    f"<b>P{p}</b><br/>{PERIODS[p][0]} - {PERIODS[p][1]}",
-                    header_style
-                )
-                for p in [6, 7, 8]
-            ])
+            matrix = [header]
 
             # -------------------------------------------------
-            # TIMETABLE MATRIX
+            # EMPTY TIMETABLE
             # -------------------------------------------------
-
-            timetable_matrix = [header_row]
 
             for day in DAYS:
 
-                row_data = [
+                matrix.append([
                     Paragraph(
                         f"<b>{day.upper()}</b>",
                         header_style
-                    )
-                ]
-
-                # P1
-                row_data.append("")
-
-                # P2
-                row_data.append("")
-
-                # Morning break
-                row_data.append(
+                    ),
+                    "",
+                    "",
                     Paragraph(
-                        "<b>BREAK</b><br/>10:10 - 10:30",
+                        "<b>BREAK</b>",
                         cell_style
-                    )
-                )
-
-                # P3
-                row_data.append("")
-
-                # P4
-                row_data.append("")
-
-                # Lunch
-                row_data.append(
+                    ),
+                    "",
+                    "",
                     Paragraph(
-                        "<b>LUNCH</b><br/>12:10 - 13:30",
+                        "<b>LUNCH</b>",
                         cell_style
-                    )
-                )
-
-                # P5
-                row_data.append("")
-
-                # Break
-                row_data.append(
+                    ),
+                    "",
                     Paragraph(
-                        "<b>BREAK</b><br/>14:20 - 14:30",
+                        "<b>BREAK</b>",
                         cell_style
-                    )
-                )
+                    ),
+                    "",
+                    "",
+                    ""
+                ])
 
-                # P6
-                row_data.append("")
-
-                # P7
-                row_data.append("")
-
-                # P8
-                row_data.append("")
-
-                timetable_matrix.append(row_data)
-
-            # -------------------------------------------------
-            # FILL SESSION CELLS
-            # -------------------------------------------------
-
-            day_row_index = {
+            day_index = {
                 day: index + 1
                 for index, day in enumerate(DAYS)
             }
 
-            period_column_index = {
-                1: 1,
-                2: 2,
-                3: 4,
-                4: 5,
-                5: 7,
-                6: 9,
-                7: 10,
-                8: 11
-            }
+            # -------------------------------------------------
+            # INSERT SESSIONS
+            # -------------------------------------------------
 
             for _, row in entity_df.iterrows():
 
@@ -7774,149 +7642,127 @@ elif page == "11. Download Timetable PDF":
                     row.get(day_col)
                 )
 
-                if day not in day_row_index:
+                if day not in day_index:
                     continue
 
-                day_index = day_row_index[day]
+                row_number = day_index[day]
 
-                period_numbers = get_period_numbers(row)
+                display = subject_display(row)
 
-                subject_display = get_subject_display(row)
+                periods = get_periods(row)
 
-                for period in period_numbers:
+                for period in periods:
 
-                    if period not in period_column_index:
+                    if period not in PERIOD_COLUMN:
                         continue
 
-                    column_index = period_column_index[period]
+                    col_number = PERIOD_COLUMN[period]
 
-                    # Lab sessions may occupy multiple consecutive periods
-                    existing = timetable_matrix[
-                        day_index
-                    ][column_index]
+                    existing = matrix[
+                        row_number
+                    ][col_number]
 
                     if existing:
 
-                        existing_text = str(existing)
-
-                        timetable_matrix[
-                            day_index
-                        ][column_index] = Paragraph(
-                            existing_text + "<br/>" + subject_display,
+                        matrix[
+                            row_number
+                        ][col_number] = Paragraph(
+                            str(existing) + "<br/>" + display,
                             cell_style
                         )
 
                     else:
 
-                        timetable_matrix[
-                            day_index
-                        ][column_index] = Paragraph(
-                            subject_display,
+                        matrix[
+                            row_number
+                        ][col_number] = Paragraph(
+                            display,
                             cell_style
                         )
 
             # -------------------------------------------------
-            # TABLE WIDTHS
+            # TABLE WIDTH
             # -------------------------------------------------
 
+            page_width = landscape(A4)[0]
+
             available_width = (
-                landscape(A4)[0]
-                - doc.leftMargin
-                - doc.rightMargin
+                page_width
+                - 16 * mm
             )
 
-            column_widths = [
-                55,   # Day
-                65,   # P1
-                65,   # P2
-                42,   # Morning Break
-                65,   # P3
-                65,   # P4
-                48,   # Lunch
-                65,   # P5
-                42,   # Break
-                65,   # P6
-                65,   # P7
-                65    # P8
+            widths = [
+                48,
+                54,
+                54,
+                43,
+                54,
+                54,
+                45,
+                54,
+                40,
+                54,
+                54,
+                54
             ]
 
-            width_sum = sum(column_widths)
+            total = sum(widths)
 
-            column_widths = [
-                width * available_width / width_sum
-                for width in column_widths
+            widths = [
+                w * available_width / total
+                for w in widths
             ]
 
             timetable_table = Table(
-                timetable_matrix,
-                colWidths=column_widths,
-                rowHeights=[
-                    30
-                ] + [
-                    45
-                    for _ in DAYS
-                ],
+                matrix,
+                colWidths=widths,
+                rowHeights=[32] + [43] * 5,
                 repeatRows=1
             )
 
-            # -------------------------------------------------
-            # TIMETABLE STYLING
-            # -------------------------------------------------
+            style_commands = [
 
-            timetable_style = [
-
-                # Header
                 ("BACKGROUND", (0, 0), (-1, 0), MAROON),
                 ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
 
-                # Day column
                 ("BACKGROUND", (0, 1), (0, -1), MAROON),
                 ("TEXTCOLOR", (0, 1), (0, -1), WHITE),
-                ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
 
-                # Break columns
                 ("BACKGROUND", (3, 0), (3, -1), BREAK_PEACH),
                 ("BACKGROUND", (6, 0), (6, -1), BREAK_PEACH),
                 ("BACKGROUND", (8, 0), (8, -1), BREAK_PEACH),
 
-                # Main table
-                ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
+                ("GRID", (0, 0), (-1, -1), 0.4, GRID),
+
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
 
-                # Padding
-                ("LEFTPADDING", (0, 0), (-1, -1), 3),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3)
             ]
 
-            # Peach shading for cells containing subjects
-            for row_index in range(1, len(timetable_matrix)):
+            # Peach-colored session cells
+            for r in range(1, 6):
 
-                for col_index in range(1, len(TABLE_COLUMNS)):
+                for c in [
+                    1, 2, 4, 5, 7, 9, 10, 11
+                ]:
 
-                    if col_index in [3, 6, 8]:
-                        continue
+                    if matrix[r][c]:
 
-                    cell_value = timetable_matrix[
-                        row_index
-                    ][col_index]
-
-                    if cell_value:
-
-                        timetable_style.append(
+                        style_commands.append(
                             (
                                 "BACKGROUND",
-                                (col_index, row_index),
-                                (col_index, row_index),
+                                (c, r),
+                                (c, r),
                                 LIGHT_PEACH
                             )
                         )
 
             timetable_table.setStyle(
-                TableStyle(timetable_style)
+                TableStyle(style_commands)
             )
 
             story.append(timetable_table)
@@ -7924,68 +7770,58 @@ elif page == "11. Download Timetable PDF":
             story.append(Spacer(1, 8))
 
             # -------------------------------------------------
-            # SUBJECT / FACULTY / LOCATION ALLOCATION
+            # SUBJECT / FACULTY / LOCATION TABLE
             # -------------------------------------------------
 
             story.append(
                 Paragraph(
-                    "SUBJECT AND FACULTY AT LOCATION",
+                    "<b>SUBJECT AND FACULTY AT LOCATION</b>",
                     subtitle_style
                 )
             )
 
             allocation_data = [
                 [
-                    Paragraph("Subject Code", allocation_header_style),
-                    Paragraph("Subject Name", allocation_header_style),
-                    Paragraph("Faculty Handling", allocation_header_style),
-                    Paragraph("Location", allocation_header_style)
+                    Paragraph("Subject Code", header_style),
+                    Paragraph("Subject Name", header_style),
+                    Paragraph("Faculty Handling", header_style),
+                    Paragraph("Location", header_style)
                 ]
             ]
 
-            seen_allocations = set()
+            seen = set()
 
             for _, row in entity_df.iterrows():
 
-                details = get_session_details(row)
-
-                allocation_key = (
-                    details["code"],
-                    details["name"],
-                    details["faculty"],
-                    details["resource"]
+                code, name, faculty, location = (
+                    allocation_details(row)
                 )
 
-                if allocation_key in seen_allocations:
+                key = (
+                    code,
+                    name,
+                    faculty,
+                    location
+                )
+
+                if key in seen:
                     continue
 
-                seen_allocations.add(allocation_key)
+                seen.add(key)
 
                 allocation_data.append([
-                    Paragraph(
-                        details["code"] or "-",
-                        allocation_cell_style
-                    ),
-                    Paragraph(
-                        details["name"] or "-",
-                        allocation_cell_style
-                    ),
-                    Paragraph(
-                        details["faculty"] or "-",
-                        allocation_cell_style
-                    ),
-                    Paragraph(
-                        details["resource"] or "-",
-                        allocation_cell_style
-                    )
+                    Paragraph(code or "-", allocation_style),
+                    Paragraph(name or "-", allocation_style),
+                    Paragraph(faculty or "-", allocation_style),
+                    Paragraph(location or "-", allocation_style)
                 ])
 
             allocation_table = Table(
                 allocation_data,
                 colWidths=[
                     available_width * 0.18,
-                    available_width * 0.42,
-                    available_width * 0.22,
+                    available_width * 0.40,
+                    available_width * 0.24,
                     available_width * 0.18
                 ],
                 repeatRows=1
@@ -7997,17 +7833,16 @@ elif page == "11. Download Timetable PDF":
                     ("BACKGROUND", (0, 0), (-1, 0), MAROON),
                     ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
 
-                    ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
+                    ("GRID", (0, 0), (-1, -1), 0.4, GRID),
 
                     ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
 
                     ("LEFTPADDING", (0, 0), (-1, -1), 4),
                     ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                    ("TOPPADDING", (0, 0), (-1, -1), 5),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
 
-                    # Alternate row colors
                     ("ROWBACKGROUNDS", (0, 1), (-1, -1), [
                         WHITE,
                         colors.HexColor("#F5F5F5")
@@ -8017,54 +7852,148 @@ elif page == "11. Download Timetable PDF":
 
             story.append(allocation_table)
 
-            # -------------------------------------------------
-            # BUILD PDF
-            # -------------------------------------------------
+        # =================================================
+        # GENERATE PDF FOR ONE OR MULTIPLE ENTITIES
+        # =================================================
+
+        def generate_pdf(entity_type, entity_list):
+
+            buffer = io.BytesIO()
+
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=landscape(A4),
+                rightMargin=8 * mm,
+                leftMargin=8 * mm,
+                topMargin=8 * mm,
+                bottomMargin=8 * mm
+            )
+
+            styles = getSampleStyleSheet()
+
+            story = []
+
+            valid_entities = []
+
+            for entity in entity_list:
+
+                entity_df = filter_entity(
+                    entity_type,
+                    entity
+                )
+
+                if entity_df.empty:
+                    continue
+
+                valid_entities.append(entity)
+
+            for index, entity in enumerate(valid_entities):
+
+                entity_df = filter_entity(
+                    entity_type,
+                    entity
+                )
+
+                create_timetable_page(
+                    entity_type,
+                    entity,
+                    entity_df,
+                    story,
+                    styles
+                )
+
+                if index < len(valid_entities) - 1:
+
+                    story.append(PageBreak())
+
+            if not story:
+                return None
 
             doc.build(story)
 
-            pdf_buffer.seek(0)
+            buffer.seek(0)
 
-            return pdf_buffer.getvalue()
+            return buffer.getvalue()
 
         # =================================================
-        # PDF DOWNLOAD SELECTION
+        # ENTITY OPTIONS
+        # =================================================
+
+        section_options = (
+            sorted(
+                timetable_df[section_col]
+                .dropna()
+                .astype(str)
+                .unique()
+            )
+            if section_col is not None
+            else []
+        )
+
+        faculty_source_col = (
+            faculty_col
+            if faculty_col is not None
+            else faculty_id_col
+        )
+
+        faculty_options = (
+            sorted(
+                timetable_df[faculty_source_col]
+                .dropna()
+                .astype(str)
+                .unique()
+            )
+            if faculty_source_col is not None
+            else []
+        )
+
+        lab_df = timetable_df[
+            get_lab_mask(timetable_df)
+        ].copy()
+
+        lab_options = (
+            sorted(
+                lab_df[resource_col]
+                .dropna()
+                .astype(str)
+                .unique()
+            )
+            if resource_col is not None
+            else []
+        )
+
+        # =================================================
+        # DOWNLOAD SELECTION
         # =================================================
 
         st.divider()
 
-        st.subheader("📥 Select Timetable to Download")
+        st.subheader("📥 PDF Download Configuration")
 
         pdf_type = st.selectbox(
-            "Timetable type",
+            "Select timetable category",
             [
                 "Section / Class-wise",
+                "All Sections",
                 "Faculty-wise",
-                "Laboratory-wise"
+                "All Faculty",
+                "Laboratory-wise",
+                "All Laboratories"
             ],
             key="option11_pdf_type"
         )
 
-        # -------------------------------------------------
-        # SECTION PDF
-        # -------------------------------------------------
+        # =================================================
+        # SECTION / CLASS-WISE
+        # =================================================
 
         if pdf_type == "Section / Class-wise":
 
-            if section_col is None:
+            if not section_options:
 
-                st.error(
-                    "Section column was not found in the timetable."
-                )
+                st.error("No sections found.")
 
             else:
-
-                section_options = sorted(
-                    timetable_df[section_col]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                )
 
                 selected_section = st.selectbox(
                     "Select Section",
@@ -8072,58 +8001,76 @@ elif page == "11. Download Timetable PDF":
                     key="option11_selected_section"
                 )
 
-                selected_df = get_entity_df(
-                    "Section",
-                    selected_section
-                )
-
                 if st.button(
-                    "📄 Generate Section Timetable PDF",
-                    key="option11_generate_section_pdf"
+                    "📄 Generate Section PDF",
+                    key="option11_generate_section"
                 ):
 
-                    pdf_bytes = generate_timetable_pdf(
+                    pdf_bytes = generate_pdf(
                         "Section",
-                        selected_section,
-                        selected_df
+                        [selected_section]
                     )
+
+                    if pdf_bytes:
+
+                        st.download_button(
+                            "⬇️ Download Section PDF",
+                            pdf_bytes,
+                            file_name=f"{selected_section}_Timetable.pdf",
+                            mime="application/pdf",
+                            key="option11_download_section"
+                        )
+
+                    else:
+
+                        st.error("Could not generate PDF.")
+
+        # =================================================
+        # ALL SECTIONS
+        # =================================================
+
+        elif pdf_type == "All Sections":
+
+            st.info(
+                f"{len(section_options)} section timetables "
+                "will be included."
+            )
+
+            if st.button(
+                "📄 Generate PDF for All Sections",
+                key="option11_generate_all_sections"
+            ):
+
+                pdf_bytes = generate_pdf(
+                    "Section",
+                    section_options
+                )
+
+                if pdf_bytes:
 
                     st.download_button(
-                        "⬇️ Download Section Timetable PDF",
-                        data=pdf_bytes,
-                        file_name=(
-                            f"{selected_section}_Timetable.pdf"
-                        ),
+                        "⬇️ Download All Sections PDF",
+                        pdf_bytes,
+                        file_name="All_Sections_Timetables.pdf",
                         mime="application/pdf",
-                        key="option11_download_section_pdf"
+                        key="option11_download_all_sections"
                     )
 
-        # -------------------------------------------------
-        # FACULTY PDF
-        # -------------------------------------------------
+                else:
+
+                    st.error("Could not generate PDF.")
+
+        # =================================================
+        # FACULTY-WISE
+        # =================================================
 
         elif pdf_type == "Faculty-wise":
 
-            faculty_source_col = (
-                faculty_col
-                if faculty_col is not None
-                else faculty_id_col
-            )
+            if not faculty_options:
 
-            if faculty_source_col is None:
-
-                st.error(
-                    "Faculty column was not found."
-                )
+                st.error("No faculty found.")
 
             else:
-
-                faculty_options = sorted(
-                    timetable_df[faculty_source_col]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                )
 
                 selected_faculty = st.selectbox(
                     "Select Faculty",
@@ -8131,128 +8078,141 @@ elif page == "11. Download Timetable PDF":
                     key="option11_selected_faculty"
                 )
 
-                selected_df = get_entity_df(
-                    "Faculty",
-                    selected_faculty
-                )
-
                 if st.button(
-                    "📄 Generate Faculty Timetable PDF",
-                    key="option11_generate_faculty_pdf"
+                    "📄 Generate Faculty PDF",
+                    key="option11_generate_faculty"
                 ):
 
-                    pdf_bytes = generate_timetable_pdf(
+                    pdf_bytes = generate_pdf(
                         "Faculty",
-                        selected_faculty,
-                        selected_df
+                        [selected_faculty]
                     )
+
+                    if pdf_bytes:
+
+                        st.download_button(
+                            "⬇️ Download Faculty PDF",
+                            pdf_bytes,
+                            file_name=f"{selected_faculty}_Timetable.pdf",
+                            mime="application/pdf",
+                            key="option11_download_faculty"
+                        )
+
+                    else:
+
+                        st.error("Could not generate PDF.")
+
+        # =================================================
+        # ALL FACULTY
+        # =================================================
+
+        elif pdf_type == "All Faculty":
+
+            st.info(
+                f"{len(faculty_options)} faculty timetables "
+                "will be included."
+            )
+
+            if st.button(
+                "📄 Generate PDF for All Faculty",
+                key="option11_generate_all_faculty"
+            ):
+
+                pdf_bytes = generate_pdf(
+                    "Faculty",
+                    faculty_options
+                )
+
+                if pdf_bytes:
 
                     st.download_button(
-                        "⬇️ Download Faculty Timetable PDF",
-                        data=pdf_bytes,
-                        file_name=(
-                            f"{selected_faculty}_Timetable.pdf"
-                        ),
+                        "⬇️ Download All Faculty PDF",
+                        pdf_bytes,
+                        file_name="All_Faculty_Timetables.pdf",
                         mime="application/pdf",
-                        key="option11_download_faculty_pdf"
-                    )
-
-        # -------------------------------------------------
-        # LAB PDF
-        # -------------------------------------------------
-
-        elif pdf_type == "Laboratory-wise":
-
-            if resource_col is None:
-
-                st.error(
-                    "Resource column was not found."
-                )
-
-            else:
-
-                lab_mask = (
-                    timetable_df[resource_col]
-                    .astype(str)
-                    .str.contains(
-                        "Lab",
-                        case=False,
-                        na=False
-                    )
-                )
-
-                if resource_type_col is not None:
-
-                    lab_mask |= (
-                        timetable_df[resource_type_col]
-                        .astype(str)
-                        .str.contains(
-                            "Lab",
-                            case=False,
-                            na=False
-                        )
-                    )
-
-                if session_type_col is not None:
-
-                    lab_mask |= (
-                        timetable_df[session_type_col]
-                        .astype(str)
-                        .str.contains(
-                            "Lab",
-                            case=False,
-                            na=False
-                        )
-                    )
-
-                lab_df = timetable_df[lab_mask].copy()
-
-                lab_options = sorted(
-                    lab_df[resource_col]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                )
-
-                if not lab_options:
-
-                    st.warning(
-                        "No laboratories were found in the timetable."
+                        key="option11_download_all_faculty"
                     )
 
                 else:
 
-                    selected_lab = st.selectbox(
-                        "Select Laboratory",
-                        lab_options,
-                        key="option11_selected_lab"
-                    )
+                    st.error("Could not generate PDF.")
 
-                    selected_df = get_entity_df(
+        # =================================================
+        # LABORATORY-WISE
+        # =================================================
+
+        elif pdf_type == "Laboratory-wise":
+
+            if not lab_options:
+
+                st.warning("No laboratories found.")
+
+            else:
+
+                selected_lab = st.selectbox(
+                    "Select Laboratory",
+                    lab_options,
+                    key="option11_selected_lab"
+                )
+
+                if st.button(
+                    "📄 Generate Laboratory PDF",
+                    key="option11_generate_lab"
+                ):
+
+                    pdf_bytes = generate_pdf(
                         "Laboratory",
-                        selected_lab
+                        [selected_lab]
                     )
 
-                    if st.button(
-                        "📄 Generate Laboratory Timetable PDF",
-                        key="option11_generate_lab_pdf"
-                    ):
-
-                        pdf_bytes = generate_timetable_pdf(
-                            "Laboratory",
-                            selected_lab,
-                            selected_df
-                        )
+                    if pdf_bytes:
 
                         st.download_button(
-                            "⬇️ Download Laboratory Timetable PDF",
-                            data=pdf_bytes,
-                            file_name=(
-                                f"{selected_lab}_Timetable.pdf"
-                            ),
+                            "⬇️ Download Laboratory PDF",
+                            pdf_bytes,
+                            file_name=f"{selected_lab}_Timetable.pdf",
                             mime="application/pdf",
-                            key="option11_download_lab_pdf"
+                            key="option11_download_lab"
                         )
+
+                    else:
+
+                        st.error("Could not generate PDF.")
+
+        # =================================================
+        # ALL LABORATORIES
+        # =================================================
+
+        elif pdf_type == "All Laboratories":
+
+            st.info(
+                f"{len(lab_options)} laboratory timetables "
+                "will be included."
+            )
+
+            if st.button(
+                "📄 Generate PDF for All Laboratories",
+                key="option11_generate_all_labs"
+            ):
+
+                pdf_bytes = generate_pdf(
+                    "Laboratory",
+                    lab_options
+                )
+
+                if pdf_bytes:
+
+                    st.download_button(
+                        "⬇️ Download All Laboratories PDF",
+                        pdf_bytes,
+                        file_name="All_Laboratories_Timetables.pdf",
+                        mime="application/pdf",
+                        key="option11_download_all_labs"
+                    )
+
+                else:
+
+                    st.error("Could not generate PDF.")
 # =========================================================
 # FOOTER
 # =========================================================
