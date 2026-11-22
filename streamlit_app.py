@@ -6830,6 +6830,44 @@ elif page == "9. CP-SAT Timetable Solver":
                     "Generate the timetable using CP-SAT first. "
                     "The timetable viewer will remain available after generation."
                 )
+# =========================================================
+# 10. INDEPENDENT GENERATED TIMETABLE GRAPH VIEWER
+# =========================================================
+elif page == "10. View Generated Timetable":
+
+    st.header("📅 Interactive Generated Timetable Graph")
+
+    if (
+        "generated_timetable" not in st.session_state
+        or st.session_state.generated_timetable is None
+        or st.session_state.generated_timetable.empty
+    ):
+        st.info("Generate the timetable using CP-SAT first.")
+
+    else:
+        timetable_df = st.session_state.generated_timetable.copy()
+        st.success(
+            f"Saved timetable loaded: {len(timetable_df)} scheduled sessions | "
+            f"Status: {st.session_state.get('cpsat_status', 'Unknown')}"
+        )
+
+        # IMPORTANT: Define view_type BEFORE any filtering branches.
+        view_type = st.selectbox(
+            "View timetable by",
+            [
+                "Master Timetable",
+                "Section-wise",
+                "Faculty-wise",
+                "Laboratory-wise"
+            ],
+            key="independent_timetable_view_type"
+        )
+
+        filtered_df = timetable_df.copy()
+        selection_column = None
+        selection_label = None
+
+        if view_type == "Section-wise":
             selection_column, selection_label = "Section_ID", "Select Section"
         elif view_type == "Faculty-wise":
             selection_column, selection_label = "Faculty_ID", "Select Faculty"
@@ -6887,7 +6925,7 @@ elif page == "9. CP-SAT Timetable Solver":
                 nodes[section_node] = {"layer": 3, "kind": "section", "label": section, "hover": f"<b>Section</b><br>{section}"}
                 nodes[resource_node] = {"layer": 4, "kind": "resource", "label": resource, "hover": f"<b>Room / Laboratory</b><br>{resource}<br>Type: {resource_type}"}
                 edges += [(time_node, session_node, "time"), (session_node, faculty_node, "faculty"), (session_node, section_node, "section"), (session_node, resource_node, "resource")]
-
+                
             layer_nodes = {layer: [n for n, d in nodes.items() if d["layer"] == layer] for layer in range(5)}
             positions = {}
             for layer, items in layer_nodes.items():
@@ -6946,6 +6984,7 @@ elif page == "9. CP-SAT Timetable Solver":
             )
         else:
             st.info("No timetable rows match this graph selection.")
+
 
 # =========================================================
 # FOOTER
