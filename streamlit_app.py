@@ -10,6 +10,11 @@ import networkx as nx
 import plotly.graph_objects as go
 import numpy as np
 import math
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 
 
 # =========================================================
@@ -62,7 +67,8 @@ page = st.sidebar.radio(
         "7. Classroom & Laboratory Configuration",
         "8. Generate Timetable",
         "9. CP-SAT Timetable Solver",
-        "10. View Generated Timetable"
+        "10. View Generated Timetable",
+        "11. Download Timetable PDF"
     ]
 )
 
@@ -7004,8 +7010,227 @@ elif page == "10. View Generated Timetable":
             )
         else:
             st.info("No timetable rows match this graph selection.")
+# =========================================================
+# 11. DOWNLOAD TIMETABLE PDF
+# =========================================================
+elif page == "11. Download Timetable PDF":
 
+    st.divider()
+    st.subheader("📄 Download Formal Timetable PDF")
+    st.write("Choose the timetable type and entity. The PDF uses the maroon-and-peach format shown in your reference image.")
+    
+    pdf_view_type = st.selectbox(
+        "PDF timetable type",
+        ["Class / Section Timetable", "Faculty Timetable", "Laboratory Timetable"],
+        key="formal_pdf_timetable_type"
+    )
+    
+    pdf_df = st.session_state.generated_timetable.copy()
+    
+    if pdf_view_type == "Class / Section Timetable":
+    pdf_filter_col = "Section_ID"
+    pdf_filter_label = "Select Class / Section"
+    elif pdf_view_type == "Faculty Timetable":
+        pdf_filter_col = "Faculty_ID"
+        pdf_filter_label = "Select Faculty"
+    else:
+        pdf_filter_col = "Resource"
+        pdf_filter_label = "Select Laboratory"
+        lab_mask = (
+            pdf_df.get("Session_Type", pd.Series(index=pdf_df.index, dtype=str))
+            .astype(str).str.contains("lab", case=False, na=False)
+            |
+            pdf_df.get("Resource_Type", pd.Series(index=pdf_df.index, dtype=str))
+            .astype(str).str.contains("lab", case=False, na=False)
+        )
+        pdf_df = pdf_df[lab_mask].copy()
 
+    pdf_entities = (
+    sorted(pdf_df[pdf_filter_col].dropna().astype(str).unique().tolist())
+    if pdf_filter_col in pdf_df.columns else []
+    )
+    
+    if not pdf_entities:
+        st.warning(f"No data available for {pdf_view_type.lower()} PDF export.")
+    else:
+        pdf_selected_entity = st.selectbox(
+            pdf_filter_label,
+            pdf_entities,
+            key="formal_pdf_timetable_entity"
+        )
+        pdf_selected_df = pdf_df[pdf_df[pdf_filter_col].astype(str) == pdf_selected_entity].copy()
+    
+        # PDF time grid (matching the reference timetable format)
+        pdf_periods = list(range(1, 9))
+        pdf_period_times = {
+            1: "08:30 - 09:20",
+            2: "09:20 - 10:10",
+            3: "10:30 - 11:20",
+            4: "11:20 - 12:10",
+            5: "13:30 - 14:20",
+            6: "14:30 - 15:20",
+            7: "15:20 - 16:10",
+            8: "16:10 - 17:00",
+        }
+        pdf_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        pdf_break_cols = [
+            ("MORNING BREAK", "10:10 - 10:30"),
+            ("LUNCH", "12:10 - 13:30"),
+            ("BREAK", "14:20 - 14:30"),
+        ]
+        # Grid columns: Day, P1, P2, morning break, P3, P4, lunch, P5, break, P6, P7, P8
+        pdf_grid_headers = [
+            "DAY", "P1\n08:30-09:20", "P2\n09:20-10:10", "MORNING BREAK\n10:10-10:30",
+            "P3\n10:30-11:20", "P4\n11:20-12:10", "LUNCH\n12:10-13:30",
+            "P5\n13:30-14:20", "BREAK\n14:20-14:30", "P6\n14:30-15:20",
+            "P7\n15:20-16:10", "P8\n16:10-17:00"
+        ]
+        pdf_grid = [pdf_grid_headers]
+        pdf_break_indexes = [3, 6, 8]
+    
+        def pdf_safe(value):
+            if value is None:
+                return ""
+            if isinstance(value, (list, tuple, set)):
+                return ", ".join(str(x) for x in value)
+            try:
+                missing = pd.isna(value)
+                if not hasattr(missing, "__iter__") and bool(missing):
+                    return ""
+            except (TypeError, ValueError):
+                pass
+            return str(value).strip()
+
+       for pdf_day in pdf_days:
+            day_rows = pdf_selected_df[pdf_selected_df["Day"].astype(str).str.lower() == pdf_day.lower()]
+            cells = [pdf_day.upper()]
+            for period in pdf_periods:
+                period_rows = day_rows[
+                    (pd.to_numeric(day_rows["Start_Period"], errors="coerce") <= period)
+                    & (pd.to_numeric(day_rows["End_Period"], errors="coerce") >= period)
+                ]
+                if period_rows.empty:
+                    cell_text = "-"
+                else:
+                    pieces = []
+                    for _, pdf_row in period_rows.iterrows():
+                        course_code = pdf_safe(pdf_row.get("Course_Code"))
+                        course_title = pdf_safe(pdf_row.get("Course_Title"))
+                        session_type = pdf_safe(pdf_row.get("Session_Type"))
+                        resource = pdf_safe(pdf_row.get("Resource"))
+                        label = course_code or course_title or "Class"
+                        if "lab" in session_type.lower():
+                            label += " (LAB)"
+                        if pdf_view_type == "Faculty Timetable":
+                            label += f"\n{pdf_safe(pdf_row.get('Section_ID'))}"
+                        elif pdf_view_type == "Laboratory Timetable":
+                            label += f"\n{pdf_safe(pdf_row.get('Section_ID'))}"
+                        pieces.append(label)
+                    cell_text = "\n".join(pieces)
+                cells.append(cell_text)
+                if period in (2, 4, 5):
+                    if period == 2:
+                        cells.append("MORNING BREAK\n10:10-10:30")
+                    elif period == 4:
+                        cells.append("LUNCH\n12:10-13:30")
+                    elif period == 5:
+                        cells.append("BREAK\n14:20-14:30")
+            pdf_grid.append(cells)
+    # Allocation table, analogous to the reference image
+    allocation_headers = ["Subject Code", "Subject Name", "Faculty Handling", "Location"]
+    allocation_rows = [allocation_headers]
+    alloc_cols = [c for c in ["Course_Code", "Course_Title", "Faculty_ID", "Resource"] if c in pdf_selected_df.columns]
+    if alloc_cols:
+        unique_alloc = pdf_selected_df[alloc_cols].drop_duplicates().sort_values(alloc_cols[0])
+        for _, alloc_row in unique_alloc.iterrows():
+            allocation_rows.append([
+                pdf_safe(alloc_row.get("Course_Code")),
+                pdf_safe(alloc_row.get("Course_Title")),
+                pdf_safe(alloc_row.get("Faculty_ID")),
+                pdf_safe(alloc_row.get("Resource")),
+            ])
+
+    def build_formal_timetable_pdf():
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=landscape(A4),
+            leftMargin=22, rightMargin=22, topMargin=20, bottomMargin=20
+        )
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "FormalTitle", parent=styles["Title"], fontName="Helvetica-Bold",
+            fontSize=16, leading=18, alignment=TA_CENTER, textColor=colors.HexColor("#8F3B2E")
+        )
+        subtitle_style = ParagraphStyle(
+            "FormalSubtitle", parent=styles["Normal"], fontSize=9,
+            leading=11, alignment=TA_CENTER, textColor=colors.HexColor("#8F3B2E")
+        )
+        cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=6.5, leading=7.5, alignment=TA_CENTER)
+        header_style = ParagraphStyle("Header", parent=styles["Normal"], fontSize=6.3, leading=7, alignment=TA_CENTER, textColor=colors.white)
+        allocation_style = ParagraphStyle("Allocation", parent=styles["Normal"], fontSize=7, leading=8, alignment=TA_LEFT)
+        story = [
+            Paragraph("CLASS TIMETABLE" if pdf_view_type == "Class / Section Timetable" else pdf_view_type.upper(), title_style),
+            Spacer(1, 5),
+            Paragraph(pdf_safe(pdf_selected_entity), subtitle_style),
+            Spacer(1, 12),
+        ]
+        formatted_grid = []
+        for ri, row in enumerate(pdf_grid):
+            formatted_row = []
+            for ci, cell in enumerate(row):
+                escaped = pdf_safe(cell).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
+                formatted_row.append(Paragraph(escaped, header_style if ri == 0 else cell_style))
+            formatted_grid.append(formatted_row)
+        col_widths = [65] + [62] * 8 + [54, 54, 54]
+        timetable_table = Table(formatted_grid, colWidths=col_widths, rowHeights=[30] + [57] * 5, repeatRows=1)
+        timetable_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#8F3B2E")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#8F3B2E")),
+            ("TEXTCOLOR", (0, 1), (0, -1), colors.white),
+            ("BACKGROUND", (3, 1), (3, -1), colors.HexColor("#E9D8D2")),
+            ("BACKGROUND", (6, 1), (6, -1), colors.HexColor("#E9D8D2")),
+            ("BACKGROUND", (8, 1), (8, -1), colors.HexColor("#E9D8D2")),
+            ("BACKGROUND", (1, 1), (2, -1), colors.HexColor("#F4E5E0")),
+            ("BACKGROUND", (4, 1), (5, -1), colors.white),
+            ("BACKGROUND", (7, 1), (7, -1), colors.white),
+            ("BACKGROUND", (9, 1), (11, -1), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#777777")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        story.append(timetable_table)
+        story += [Spacer(1, 10), Paragraph("SUBJECT AND FACULTY ALLOCATION", subtitle_style), Spacer(1, 5)]
+        alloc_formatted = [[Paragraph(str(x), header_style) for x in allocation_rows[0]]]
+        for row in allocation_rows[1:]:
+            alloc_formatted.append([Paragraph(pdf_safe(x).replace("&", "&amp;"), allocation_style) for x in row])
+        allocation_table = Table(alloc_formatted, colWidths=[100, 360, 220, 130], repeatRows=1)
+        allocation_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#8F3B2E")),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#777777")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F2F2")]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.append(allocation_table)
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    pdf_bytes = build_formal_timetable_pdf()
+    safe_name = "_".join(str(pdf_selected_entity).split())
+    st.download_button(
+        "⬇️ Download Formal Timetable PDF",
+        data=pdf_bytes,
+        file_name=f"{pdf_view_type.replace(' ', '_').replace('/', '-')}_{safe_name}.pdf",
+        mime="application/pdf",
+        key="formal_timetable_pdf_download"
+    )
 # =========================================================
 # FOOTER
 # =========================================================
