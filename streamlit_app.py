@@ -6830,202 +6830,122 @@ elif page == "9. CP-SAT Timetable Solver":
                     "Generate the timetable using CP-SAT first. "
                     "The timetable viewer will remain available after generation."
                 )
-# =========================================================
-# 10. INDEPENDENT GENERATED TIMETABLE VIEWER
-# =========================================================
-elif page == "10. View Generated Timetable":
-
-    st.header("📅 View Generated Timetable")
-
-    # CHECK IF TIMETABLE EXISTS
-    if (
-        "generated_timetable" not in st.session_state
-        or st.session_state.generated_timetable is None
-        or st.session_state.generated_timetable.empty
-    ):
-
-        st.info("Generate the timetable using CP-SAT first.")
-
-    else:
-
-        timetable_df = st.session_state.generated_timetable.copy()
-
-        st.success(
-            f"Saved timetable loaded: {len(timetable_df)} scheduled sessions | "
-            f"Status: {st.session_state.get('cpsat_status', 'Unknown')}"
-        )
-
-        # -------------------------------------------------
-        # VIEW TYPE
-        # -------------------------------------------------
-
-        view_type = st.selectbox(
-            "View timetable by",
-            [
-                "Master Timetable",
-                "Section-wise",
-                "Faculty-wise",
-                "Laboratory-wise"
-            ],
-            key="independent_timetable_view_type"
-        )
-
-        filtered_df = timetable_df.copy()
-
-        # -------------------------------------------------
-        # FILTER CONFIGURATION
-        # -------------------------------------------------
-
-        if view_type == "Section-wise":
-
-            column = "Section_ID"
-            label = "Select Section"
-
-            options = (
-                sorted(
-                    filtered_df[column]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                )
-                if column in filtered_df.columns
-                else []
-            )
-
+            selection_column, selection_label = "Section_ID", "Select Section"
         elif view_type == "Faculty-wise":
-
-            column = "Faculty_ID"
-            label = "Select Faculty"
-
-            options = (
-                sorted(
-                    filtered_df[column]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                )
-                if column in filtered_df.columns
-                else []
-            )
-
+            selection_column, selection_label = "Faculty_ID", "Select Faculty"
         elif view_type == "Laboratory-wise":
-
-            lab_mask = (
-                filtered_df.get(
-                    "Session_Type",
-                    pd.Series(index=filtered_df.index, dtype=str)
-                )
-                .astype(str)
-                .str.contains("Lab", case=False, na=False)
-
-                |
-
-                filtered_df.get(
-                    "Resource_Type",
-                    pd.Series(index=filtered_df.index, dtype=str)
-                )
-                .astype(str)
-                .str.contains("Lab", case=False, na=False)
-            )
-
+            session_type = filtered_df.get("Session_Type", pd.Series("", index=filtered_df.index)).astype(str)
+            resource_type = filtered_df.get("Resource_Type", pd.Series("", index=filtered_df.index)).astype(str)
+            lab_mask = session_type.str.contains("lab", case=False, na=False) | resource_type.str.contains("lab", case=False, na=False)
             filtered_df = filtered_df[lab_mask].copy()
+            selection_column, selection_label = "Resource", "Select Laboratory"
 
-            column = "Resource"
-            label = "Select Laboratory"
-
-            options = (
-                sorted(
-                    filtered_df[column]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                )
-                if column in filtered_df.columns
-                else []
-            )
-
-        else:
-
-            column = None
-            options = []
-
-        # -------------------------------------------------
-        # ENTITY SELECTION
-        # -------------------------------------------------
-
-        if column is not None:
-
+        if selection_column is not None:
+            options = sorted(filtered_df[selection_column].dropna().astype(str).unique().tolist()) if selection_column in filtered_df.columns else []
             if options:
-
-                selected_value = st.selectbox(
-                    label,
-                    options,
-                    key=f"independent_timetable_entity_{view_type}"
-                )
-
-                filtered_df = filtered_df[
-                    filtered_df[column].astype(str)
-                    == selected_value
-                ].copy()
-
+                selected_entity = st.selectbox(selection_label, options, key=f"interactive_graph_entity_{view_type}")
+                filtered_df = filtered_df[filtered_df[selection_column].astype(str) == selected_entity].copy()
             else:
-
-                st.warning(
-                    f"No available options for {view_type.lower()} view."
-                )
-
-        # -------------------------------------------------
-        # DISPLAY TIMETABLE
-        # -------------------------------------------------
+                st.warning(f"No options available for {view_type.lower()} graph.")
 
         if not filtered_df.empty:
+            import plotly.graph_objects as go
 
-            # SORTING
-            sort_columns = [
-                c
-                for c in [
-                    "Day",
-                    "Start_Period",
-                    "Semester",
-                    "Section_ID"
-                ]
-                if c in filtered_df.columns
-            ]
+            graph_df = filtered_df.copy()
+            needed = ["Session_ID", "Course_Code", "Course_Title", "Session_Type", "Faculty_ID", "Faculty_Name", "Section_ID", "Section", "Day", "Start_Time", "End_Time", "Start_Period", "End_Period", "Resource", "Resource_Type", "Periods"]
+            for col in needed:
+                if col not in graph_df.columns:
+                    graph_df[col] = ""
 
-            if sort_columns:
+            def txt(v):
+                return "" if pd.isna(v) else str(v).strip()
 
-                filtered_df = filtered_df.sort_values(
-                    sort_columns
-                )
+            nodes = {}
+            edges = []
+            for idx, row in graph_df.iterrows():
+                sid = txt(row.get("Session_ID")) or f"ROW_{idx}"
+                course = " | ".join(x for x in [txt(row.get("Course_Code")), txt(row.get("Course_Title"))] if x)
+                course = course or sid
+                day = txt(row.get("Day"))
+                start, end = txt(row.get("Start_Time")), txt(row.get("End_Time"))
+                time_label = f"{day} | {start}-{end}" if start and end else f"{day} | P{txt(row.get('Start_Period'))}-{txt(row.get('End_Period'))}"
+                faculty_id = txt(row.get("Faculty_ID"))
+                faculty = txt(row.get("Faculty_Name")) or faculty_id or "Unknown Faculty"
+                section = txt(row.get("Section_ID")) or txt(row.get("Section")) or "Unknown Section"
+                resource = txt(row.get("Resource")) or "Unassigned Resource"
+                resource_type = txt(row.get("Resource_Type"))
 
-            # SESSION COUNT
-            st.metric(
-                "Sessions displayed",
-                len(filtered_df)
+                time_node = f"TIME::{time_label}"
+                session_node = f"SESSION::{sid}"
+                faculty_node = f"FACULTY::{faculty_id or faculty}"
+                section_node = f"SECTION::{section}"
+                resource_node = f"RESOURCE::{resource}"
+
+                nodes[time_node] = {"layer": 0, "kind": "time", "label": time_label, "hover": f"<b>Time Slot</b><br>{time_label}"}
+                nodes[session_node] = {"layer": 1, "kind": "session", "label": course, "hover": f"<b>Subject Session</b><br>{course}<br>Session ID: {sid}<br>Type: {txt(row.get('Session_Type'))}<br>Section: {section}<br>Faculty: {faculty} ({faculty_id})<br>Day: {day}<br>Time: {start} - {end}<br>Periods: {txt(row.get('Periods'))}<br>Resource: {resource}<br>Resource Type: {resource_type}"}
+                nodes[faculty_node] = {"layer": 2, "kind": "faculty", "label": faculty, "hover": f"<b>Faculty</b><br>{faculty}<br>Faculty ID: {faculty_id}"}
+                nodes[section_node] = {"layer": 3, "kind": "section", "label": section, "hover": f"<b>Section</b><br>{section}"}
+                nodes[resource_node] = {"layer": 4, "kind": "resource", "label": resource, "hover": f"<b>Room / Laboratory</b><br>{resource}<br>Type: {resource_type}"}
+                edges += [(time_node, session_node, "time"), (session_node, faculty_node, "faculty"), (session_node, section_node, "section"), (session_node, resource_node, "resource")]
+
+            layer_nodes = {layer: [n for n, d in nodes.items() if d["layer"] == layer] for layer in range(5)}
+            positions = {}
+            for layer, items in layer_nodes.items():
+                count = len(items)
+                ys = [0] if count == 1 else [i - (count - 1) / 2 for i in range(count)]
+                for n, y in zip(items, ys):
+                    positions[n] = (layer, y)
+
+            edge_colors = {"time": "#2563eb", "faculty": "#16a34a", "section": "#9333ea", "resource": "#ea580c"}
+            node_colors = {"time": "#3b82f6", "session": "#16a34a", "faculty": "#f59e0b", "section": "#a855f7", "resource": "#f97316"}
+            node_sizes = {"time": 17, "session": 22, "faculty": 20, "section": 20, "resource": 20}
+            titles = {"time": "Time Slot", "session": "Subject Session", "faculty": "Faculty", "section": "Section", "resource": "Room / Laboratory"}
+            fig = go.Figure()
+
+            for edge_type, color in edge_colors.items():
+                xe, ye = [], []
+                for a, b, typ in edges:
+                    if typ == edge_type:
+                        xa, ya = positions[a]; xb, yb = positions[b]
+                        xe += [xa, xb, None]; ye += [ya, yb, None]
+                if xe:
+                    fig.add_trace(go.Scatter(x=xe, y=ye, mode="lines", line=dict(color=color, width=1.5), hoverinfo="skip", showlegend=False))
+
+            for kind in ["time", "session", "faculty", "section", "resource"]:
+                ns = [n for n, d in nodes.items() if d["kind"] == kind]
+                if ns:
+                    fig.add_trace(go.Scatter(
+                        x=[positions[n][0] for n in ns], y=[positions[n][1] for n in ns],
+                        mode="markers+text", text=[nodes[n]["label"] for n in ns], textposition="middle right",
+                        textfont=dict(color="#1f2937", size=10), marker=dict(size=node_sizes[kind], color=node_colors[kind], line=dict(color="#374151", width=1)),
+                        customdata=[nodes[n]["hover"] for n in ns], hovertemplate="%{customdata}<extra></extra>", name=titles[kind]
+                    ))
+
+            for x, label in enumerate(["Time Slot", "Subject Session", "Faculty", "Section", "Room / Laboratory"]):
+                fig.add_annotation(x=x, y=1.04, xref="x", yref="paper", text=f"<b>{label}</b>", showarrow=False, font=dict(size=14, color="#111827"))
+
+            graph_height = max(650, max(len(v) for v in layer_nodes.values()) * 35)
+            fig.update_layout(
+                title=f"Interactive Timetable Graph — {view_type}", height=graph_height,
+                plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#111827"),
+                showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.08, xanchor="center", x=0.5),
+                margin=dict(l=40, r=50, t=100, b=100),
+                xaxis=dict(range=[-0.3, 4.5], showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False), hovermode="closest"
             )
+            st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True, "displaylogo": False})
 
-            # TABLE
-            st.dataframe(
-                filtered_df,
-                use_container_width=True,
-                hide_index=True
-            )
+            with st.expander("View underlying timetable data"):
+                st.dataframe(graph_df, use_container_width=True, hide_index=True)
 
-            # DOWNLOAD
             st.download_button(
                 "⬇️ Download displayed timetable as CSV",
-                data=filtered_df.to_csv(index=False).encode("utf-8"),
+                data=graph_df.to_csv(index=False).encode("utf-8"),
                 file_name=f"{view_type.replace(' ', '_')}_timetable.csv",
-                mime="text/csv",
-                key="independent_timetable_download"
+                mime="text/csv", key="interactive_graph_download"
             )
-
         else:
-
-            st.info(
-                "No timetable rows match this view."
-            )
-
+            st.info("No timetable rows match this graph selection.")
 
 # =========================================================
 # FOOTER
