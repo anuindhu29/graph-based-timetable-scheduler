@@ -6800,7 +6800,6 @@ elif page == "10. View Generated Timetable":
             )
         else:
             st.info("No timetable rows match this graph selection.")
-# =========================================================
 # 11. DOWNLOAD TIMETABLE PDF
 # =========================================================
 elif page == "11. Download Timetable PDF":
@@ -7096,6 +7095,39 @@ elif page == "11. Download Timetable PDF":
                 if subject_name_col
                 else ""
             )
+
+            # In the timetable grid, clearly label lab sessions as LAB
+            # instead of displaying the course code as if it were a theory subject.
+            resource = (
+                pdf_txt(row.get(resource_col))
+                if resource_col
+                else ""
+            )
+
+            resource_type = (
+                pdf_txt(row.get(resource_type_col))
+                if resource_type_col
+                else ""
+            )
+
+            session_type = (
+                pdf_txt(row.get(session_type_col))
+                if session_type_col
+                else ""
+            )
+
+            is_lab = any(
+                "lab" in value.lower()
+                for value in [resource, resource_type, session_type]
+                if value
+            )
+
+            if is_lab:
+                lab_subject = name or code or "LAB SESSION"
+                return (
+                    "<b>LAB</b><br/>"
+                    f"<font size='7'>{lab_subject}</font>"
+                )
 
             if code and name and code != name:
 
