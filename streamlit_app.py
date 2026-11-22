@@ -6896,7 +6896,27 @@ elif page == "10. View Generated Timetable":
                     graph_df[col] = ""
 
             def txt(v):
-                return "" if pd.isna(v) else str(v).strip()
+            
+                if v is None:
+                    return ""
+            
+                # Handle lists, tuples, sets, and arrays safely
+                if isinstance(v, (list, tuple, set)):
+                    return ", ".join(str(item) for item in v)
+            
+                # Handle pandas missing values safely
+                try:
+                    missing = pd.isna(v)
+            
+                    # Only evaluate scalar missing values
+                    if not hasattr(missing, "__iter__"):
+                        if bool(missing):
+                            return ""
+            
+                except (TypeError, ValueError):
+                    pass
+            
+                return str(v).strip()
 
             nodes = {}
             edges = []
