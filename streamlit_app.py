@@ -6313,7 +6313,817 @@ elif page == "8. Generate Timetable":
                 st.info(
                     "Confirm the conflict graph before proceeding to CP-SAT."
                 )
+# =========================================================
+# 9. CP-SAT TIMETABLE SOLVER
+# =========================================================
 
+elif page == "9. CP-SAT Timetable Solver":
+
+    st.header("CP-SAT Timetable Generation")
+
+    st.write(
+        "Generate a feasible timetable using Google OR-Tools CP-SAT."
+    )
+
+    # -----------------------------------------------------
+    # 1. CHECK INPUT DATA
+    # -----------------------------------------------------
+
+    required_state = [
+        "scheduling_sessions",
+        "scheduling_domains",
+        "STATIC_GRAPH_EDGES"
+    ]
+
+    missing_state = [
+        item for item in required_state
+        if item not in st.session_state
+    ]
+
+    if missing_state:
+
+        st.error(
+            "Required scheduling data is missing. "
+            "Complete the scheduling dataset, domains, "
+            "and conflict graph first."
+        )
+
+    else:
+
+        SESSIONS = st.session_state.scheduling_sessions.copy()
+
+        DOMAINS = st.session_state.scheduling_domains
+
+        GRAPH_EDGES = st.session_state.STATIC_GRAPH_EDGES
+
+        # -------------------------------------------------
+        # 2. CHECK EMPTY DOMAINS
+        # -------------------------------------------------
+
+        empty_sessions = [
+            session_id
+            for session_id, domain in DOMAINS.items()
+            if not domain
+        ]
+
+        if empty_sessions:
+
+            st.error(
+                f"{len(empty_sessions)} session(s) have empty domains."
+            )
+
+            st.write(empty_sessions)
+
+        else:
+
+            st.success(
+                f"All {len(DOMAINS)} sessions have candidate assignments."
+            )
+
+        # -------------------------------------------------
+        # 3. GRAPH CONFLICT LOOKUP
+        # -------------------------------------------------
+
+        SECTION_CONFLICT_PAIRS = set()
+
+        for edge in GRAPH_EDGES:
+
+            a = str(edge["Source"])
+            b = str(edge["Target"])
+
+            SECTION_CONFLICT_PAIRS.add(
+                tuple(sorted((a, b)))
+            )
+
+        # -------------------------------------------------
+        # 4. SOLVER BUTTON
+        # -------------------------------------------------
+
+        if st.button(
+            "🚀 Generate Timetable using CP-SAT",
+            type="primary"
+        ):
+
+            if empty_sessions:
+
+                st.error(
+                    "Cannot generate timetable because "
+                    "some sessions have empty domains."
+                )
+
+            else:
+
+                from ortools.sat.python import cp_model
+
+                model = cp_model.CpModel()
+
+                # -------------------------------------------------
+                # 5. CREATE DECISION VARIABLES
+                # -------------------------------------------------
+
+                assignment_vars = {}
+
+                session_ids = list(DOMAINS.keys())
+
+                for session_id in session_ids:
+
+                    assignment_vars[session_id] = []
+
+                    for option_index, option in enumerate(
+                        DOMAINS[session_id]
+                    ):
+
+                        variable = model.NewBoolVar(
+                            f"x_{session_id}_{option_index}"
+                        )
+
+                        assignment_vars[session_id].append(
+                            variable
+                        )
+
+                # -------------------------------------------------
+                # 6. EACH SESSION MUST HAVE EXACTLY ONE ASSIGNMENT
+                # -------------------------------------------------
+
+                for session_id in session_ids:
+
+                    model.Add(
+                        sum(assignment_vars[session_id]) == 1
+                    )
+
+                # -------------------------------------------------
+                # 7. HELPER: PERIOD OVERLAP
+                # -------------------------------------------------
+
+                def option_periods(option):
+
+                    periods = option.get("Periods", [])
+
+                    if periods:
+
+                        return set(
+                            int(p) for p in periods
+                        )
+
+                    return set(
+                        range(
+                            int(option["Start_Period"]),
+                            int(option["End_Period"]) + 1
+                        )
+                    )
+
+                def options_overlap(option_a, option_b):
+
+                    if str(option_a["Day"]) != str(option_b["Day"]):
+                        return False
+
+                    periods_a = option_periods(option_a)
+                    periods_b = option_periods(option_b)
+
+                    return bool(
+                        periods_a.intersection(periods_b)
+                    )
+
+                # -------------------------------------------------
+                # 8. ADD CONFLICT CONSTRAINTS
+                # -------------------------------------------------
+
+                section_constraints = 0
+                faculty_constraints = 0
+                resource_constraints = 0
+
+                for i in range(len(session_ids)):
+
+                    session_a_id = session_ids[i]
+
+                    domain_a = DOMAINS[session_a_id]
+
+                    for j in range(i + 1, len(session_ids)):
+
+                        session_b_id = session_ids[j]
+
+                        domain_b = DOMAINS[session_b_id]
+
+                        pair = tuple(
+                            sorted(
+                                (
+                                    str(session_a_id),
+                                    str(session_b_id)
+                                )
+                            )
+                        )
+
+                        is_section_conflict = (
+                            pair in SECTION_CONFLICT_PAIRS
+                        )
+
+                        # -----------------------------------------
+                        # Compare candidate assignments
+                        # -----------------------------------------
+
+                        for option_a_index, option_a in enumerate(
+                            domain_a
+                        ):
+
+                            variable_a = assignment_vars[
+                                session_a_id
+                            ][option_a_index]
+
+                            for option_b_index, option_b in enumerate(
+                                domain_b
+                            ):
+
+                                variable_b = assignment_vars[
+                                    session_b_id
+                                ][option_b_index]
+
+                                if not options_overlap(
+                                    option_a,
+                                    option_b
+                                ):
+                                    continue
+
+                                # ---------------------------------
+                                # SAME SECTION
+                                # ---------------------------------
+
+                                if is_section_conflict:
+
+                                    model.Add(
+                                        variable_a + variable_b <= 1
+                                    )
+
+                                    section_constraints += 1
+
+                                # ---------------------------------
+                                # SAME FACULTY
+                                # ---------------------------------
+
+                                faculty_a = str(
+                                    option_a["Faculty_ID"]
+                                ).strip()
+
+                                faculty_b = str(
+                                    option_b["Faculty_ID"]
+                                ).strip()
+
+                                if faculty_a == faculty_b:
+
+                                    model.Add(
+                                        variable_a + variable_b <= 1
+                                    )
+
+                                    faculty_constraints += 1
+
+                                # ---------------------------------
+                                # SAME RESOURCE
+                                # ---------------------------------
+
+                                resource_a = str(
+                                    option_a["Resource"]
+                                ).strip()
+
+                                resource_b = str(
+                                    option_b["Resource"]
+                                ).strip()
+
+                                if resource_a == resource_b:
+
+                                    model.Add(
+                                        variable_a + variable_b <= 1
+                                    )
+
+                                    resource_constraints += 1
+
+                # -------------------------------------------------
+                # 9. SOLVE
+                # -------------------------------------------------
+
+                solver = cp_model.CpSolver()
+
+                solver.parameters.max_time_in_seconds = 60
+
+                solver.parameters.num_search_workers = 8
+
+                solver.parameters.log_search_progress = False
+
+                with st.spinner(
+                    "CP-SAT is searching for a feasible timetable..."
+                ):
+
+                    status = solver.Solve(model)
+
+                # -------------------------------------------------
+                # 10. DISPLAY SOLVER STATUS
+                # -------------------------------------------------
+
+                if status in (
+                    cp_model.OPTIMAL,
+                    cp_model.FEASIBLE
+                ):
+
+                    timetable_records = []
+
+                    for session_id in session_ids:
+
+                        selected_option = None
+
+                        for option_index, variable in enumerate(
+                            assignment_vars[session_id]
+                        ):
+
+                            if solver.Value(variable) == 1:
+
+                                selected_option = DOMAINS[
+                                    session_id
+                                ][option_index]
+
+                                break
+
+                        if selected_option is None:
+                            continue
+
+                        session_row = SESSIONS[
+                            SESSIONS["Session_ID"].astype(str)
+                            == str(session_id)
+                        ]
+
+                        if not session_row.empty:
+
+                            session_data = (
+                                session_row.iloc[0].to_dict()
+                            )
+
+                        else:
+
+                            session_data = {}
+
+                        timetable_records.append({
+
+                            "Session_ID": session_id,
+
+                            "Section_ID": session_data.get(
+                                "Section_ID", ""
+                            ),
+
+                            "Programme": session_data.get(
+                                "Programme", ""
+                            ),
+
+                            "Semester": session_data.get(
+                                "Semester", ""
+                            ),
+
+                            "Section": session_data.get(
+                                "Section", ""
+                            ),
+
+                            "Course_Code": session_data.get(
+                                "Course_Code", ""
+                            ),
+
+                            "Course_Title": session_data.get(
+                                "Course_Title", ""
+                            ),
+
+                            "Session_Type": session_data.get(
+                                "Session_Type", ""
+                            ),
+
+                            "Faculty_ID": selected_option[
+                                "Faculty_ID"
+                            ],
+
+                            "Day": selected_option["Day"],
+
+                            "Start_Period": selected_option[
+                                "Start_Period"
+                            ],
+
+                            "End_Period": selected_option[
+                                "End_Period"
+                            ],
+
+                            "Start_Time": selected_option[
+                                "Start_Time"
+                            ],
+
+                            "End_Time": selected_option[
+                                "End_Time"
+                            ],
+
+                            "Periods": selected_option[
+                                "Periods"
+                            ],
+
+                            "Resource": selected_option[
+                                "Resource"
+                            ],
+
+                            "Resource_Type": selected_option[
+                                "Resource_Type"
+                            ]
+
+                        })
+
+                    TIMETABLE_DF = pd.DataFrame(
+                        timetable_records
+                    )
+
+                    # ---------------------------------------------
+                    # SAVE RESULTS
+                    # ---------------------------------------------
+
+                    st.session_state.generated_timetable = (
+                        TIMETABLE_DF
+                    )
+
+                    st.session_state.cpsat_status = (
+                        solver.StatusName(status)
+                    )
+
+                    st.session_state.cpsat_runtime = (
+                        solver.WallTime()
+                    )
+
+                    st.session_state.cpsat_constraints = {
+
+                        "Section Conflict Constraints":
+                            section_constraints,
+
+                        "Faculty Conflict Constraints":
+                            faculty_constraints,
+
+                        "Resource Conflict Constraints":
+                            resource_constraints
+                    }
+        
+            # =====================================================
+            # PERSISTENT TIMETABLE VIEWER
+            # OUTSIDE GENERATE BUTTON
+            # =====================================================
+    
+            if "generated_timetable" in st.session_state:
+    
+                timetable_df = st.session_state.generated_timetable.copy()
+    
+                # Solver information
+                st.success(
+                    f"Timetable generated successfully | "
+                    f"Status: {st.session_state.get('cpsat_status', 'Unknown')}"
+                )
+    
+                col1, col2 = st.columns(2)
+    
+                col1.metric(
+                    "Solver Runtime",
+                    f"{st.session_state.get('cpsat_runtime', 0):.2f} seconds"
+                )
+    
+                col2.metric(
+                    "Conflict Graph Edges",
+                    len(st.session_state.get("STATIC_GRAPH_EDGES", []))
+                )
+    
+                # Constraint information
+                constraints = st.session_state.get(
+                    "cpsat_constraints", {}
+                )
+    
+                st.subheader("CP-SAT Constraint Statistics")
+    
+                c1, c2, c3, c4 = st.columns(4)
+    
+                section_count = constraints.get(
+                    "Section Conflict Constraints", 0
+                )
+    
+                faculty_count = constraints.get(
+                    "Faculty Conflict Constraints", 0
+                )
+    
+                resource_count = constraints.get(
+                    "Resource Conflict Constraints", 0
+                )
+    
+                c1.metric("Section", section_count)
+                c2.metric("Faculty", faculty_count)
+                c3.metric("Resource", resource_count)
+    
+                c4.metric(
+                    "Total",
+                    section_count + faculty_count + resource_count
+                )
+    
+                st.caption(
+                    "CP-SAT assignment constraints are different from "
+                    "conflict graph edges."
+                )
+    
+                if timetable_df.empty:
+    
+                    st.warning("The timetable is empty.")
+    
+                else:
+    
+                    st.divider()
+                    st.header("📅 Timetable Viewer")
+    
+                    # VIEW TYPE
+                    view_type = st.selectbox(
+                        "View timetable by",
+                        [
+                            "Section-wise",
+                            "Faculty-wise",
+                            "Laboratory-wise",
+                            "Master Timetable"
+                        ],
+                        key="persistent_view_type"
+                    )
+    
+                    # FILTER OPTIONS
+                    lab_df = pd.DataFrame()
+    
+                    if view_type == "Section-wise":
+    
+                        options = sorted(
+                            timetable_df["Section_ID"]
+                            .dropna()
+                            .astype(str)
+                            .unique()
+                        )
+    
+                        filter_column = "Section_ID"
+                        filter_label = "Select Section"
+    
+                    elif view_type == "Faculty-wise":
+    
+                        options = sorted(
+                            timetable_df["Faculty_ID"]
+                            .dropna()
+                            .astype(str)
+                            .unique()
+                        )
+    
+                        filter_column = "Faculty_ID"
+                        filter_label = "Select Faculty"
+    
+                    elif view_type == "Laboratory-wise":
+    
+                        lab_df = timetable_df[
+                            timetable_df["Session_Type"]
+                            .astype(str)
+                            .str.contains("Lab", case=False, na=False)
+                            |
+                            timetable_df["Resource_Type"]
+                            .astype(str)
+                            .str.contains("Lab", case=False, na=False)
+                        ].copy()
+    
+                        options = sorted(
+                            lab_df["Resource"]
+                            .dropna()
+                            .astype(str)
+                            .unique()
+                        )
+    
+                        filter_column = "Resource"
+                        filter_label = "Select Laboratory"
+    
+                    else:
+    
+                        options = ["All"]
+                        filter_column = None
+                        filter_label = "Master Timetable"
+    
+                    # ENTITY SELECTION
+                    if options:
+    
+                        selected = st.selectbox(
+                            filter_label,
+                            options,
+                            key=f"persistent_entity_{view_type}"
+                        )
+    
+                        # FILTER DATA
+                        if view_type == "Master Timetable":
+    
+                            view_df = timetable_df.copy()
+    
+                        elif view_type == "Laboratory-wise":
+    
+                            view_df = lab_df[
+                                lab_df["Resource"].astype(str) == selected
+                            ].copy()
+    
+                        else:
+    
+                            view_df = timetable_df[
+                                timetable_df[filter_column].astype(str) == selected
+                            ].copy()
+    
+                        view_df = view_df.sort_values(
+                            ["Day", "Start_Period"]
+                        )
+    
+                        st.subheader(f"{view_type}: {selected}")
+    
+                        st.metric(
+                            "Number of Sessions",
+                            len(view_df)
+                        )
+    
+                        # MASTER TABLE
+                        if view_type == "Master Timetable":
+    
+                            st.dataframe(
+                                view_df,
+                                use_container_width=True,
+                                hide_index=True
+                            )
+    
+                        else:
+    
+                            # PERIOD INFORMATION
+                            valid_periods = st.session_state.valid_periods
+    
+                            periods = sorted(
+                                set(
+                                    int(p["Period"])
+                                    for p in valid_periods
+                                )
+                            )
+    
+                            period_info = {
+                                int(p["Period"]): (
+                                    p["Start_Time"],
+                                    p["End_Time"]
+                                )
+                                for p in valid_periods
+                            }
+    
+                            period_labels = [
+                                f"P{p} ({period_info[p][0]}-{period_info[p][1]})"
+                                for p in periods
+                            ]
+    
+                            days = [
+                                "Monday",
+                                "Tuesday",
+                                "Wednesday",
+                                "Thursday",
+                                "Friday"
+                            ]
+    
+                            fig = go.Figure()
+    
+                            # GRID
+                            for day_idx, day in enumerate(days):
+    
+                                for period_idx, period in enumerate(periods):
+    
+                                    fig.add_shape(
+                                        type="rect",
+                                        x0=day_idx - 0.5,
+                                        x1=day_idx + 0.5,
+                                        y0=period_idx - 0.5,
+                                        y1=period_idx + 0.5,
+                                        line=dict(color="lightgrey"),
+                                        fillcolor="white",
+                                        layer="below"
+                                    )
+    
+                            # CLASSES
+                            for _, row in view_df.iterrows():
+    
+                                if row["Day"] not in days:
+                                    continue
+    
+                                day_idx = days.index(row["Day"])
+    
+                                start_period = int(row["Start_Period"])
+                                end_period = int(row["End_Period"])
+    
+                                if start_period not in periods:
+                                    continue
+    
+                                start_idx = periods.index(start_period)
+    
+                                if end_period in periods:
+                                    end_idx = periods.index(end_period)
+                                else:
+                                    end_idx = start_idx
+    
+                                is_lab = (
+                                    "lab" in str(row["Session_Type"]).lower()
+                                )
+    
+                                color = (
+                                    "rgba(230,140,50,0.75)"
+                                    if is_lab
+                                    else "rgba(55,130,200,0.75)"
+                                )
+    
+                                fig.add_shape(
+                                    type="rect",
+                                    x0=day_idx - 0.43,
+                                    x1=day_idx + 0.43,
+                                    y0=start_idx - 0.43,
+                                    y1=end_idx + 0.43,
+                                    fillcolor=color,
+                                    line=dict(color="black")
+                                )
+    
+                                # LABEL
+                                if view_type == "Section-wise":
+    
+                                    label = (
+                                        f"{row['Course_Code']}<br>"
+                                        f"{row['Course_Title']}<br>"
+                                        f"Faculty: {row['Faculty_ID']}<br>"
+                                        f"{row['Resource']}"
+                                    )
+    
+                                elif view_type == "Faculty-wise":
+    
+                                    label = (
+                                        f"{row['Course_Code']}<br>"
+                                        f"{row['Course_Title']}<br>"
+                                        f"Section: {row['Section_ID']}<br>"
+                                        f"{row['Resource']}"
+                                    )
+    
+                                else:
+    
+                                    label = (
+                                        f"{row['Course_Code']}<br>"
+                                        f"{row['Course_Title']}<br>"
+                                        f"Section: {row['Section_ID']}<br>"
+                                        f"Faculty: {row['Faculty_ID']}"
+                                    )
+    
+                                fig.add_annotation(
+                                    x=day_idx,
+                                    y=(start_idx + end_idx) / 2,
+                                    text=label,
+                                    showarrow=False,
+                                    font=dict(size=10, color="black"),
+                                    align="center"
+                                )
+    
+                            # CHART SETTINGS
+                            fig.update_layout(
+                                title=f"{view_type} - {selected}",
+                                height=max(700, len(periods) * 90),
+                                xaxis=dict(
+                                    tickmode="array",
+                                    tickvals=list(range(len(days))),
+                                    ticktext=days,
+                                    side="top",
+                                    range=[-0.5, len(days) - 0.5]
+                                ),
+                                yaxis=dict(
+                                    tickmode="array",
+                                    tickvals=list(range(len(periods))),
+                                    ticktext=period_labels,
+                                    autorange="reversed"
+                                ),
+                                showlegend=False
+                            )
+    
+                            st.plotly_chart(
+                                fig,
+                                use_container_width=True
+                            )
+    
+                        # DETAILS
+                        with st.expander("View Timetable Data"):
+    
+                            st.dataframe(
+                                view_df,
+                                use_container_width=True,
+                                hide_index=True
+                            )
+    
+                        # DOWNLOAD
+                        st.download_button(
+                            "Download Timetable CSV",
+                            data=view_df.to_csv(index=False).encode("utf-8"),
+                            file_name=f"{view_type}_{selected}.csv",
+                            mime="text/csv",
+                            key=f"download_{view_type}"
+                        )
+    
+                    else:
+    
+                        st.warning("No timetable data available for this selection.")
+    
+            else:
+    
+                st.info(
+                    "Generate the timetable using CP-SAT first. "
+                    "The timetable viewer will remain available after generation."
+                )
 # =========================================================
 # 10. INDEPENDENT GENERATED TIMETABLE VIEWER
 # =========================================================
