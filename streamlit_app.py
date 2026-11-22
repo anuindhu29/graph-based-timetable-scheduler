@@ -7015,222 +7015,1244 @@ elif page == "10. View Generated Timetable":
 # =========================================================
 elif page == "11. Download Timetable PDF":
 
-    st.divider()
-    st.subheader("📄 Download Formal Timetable PDF")
-    st.write("Choose the timetable type and entity. The PDF uses the maroon-and-peach format shown in your reference image.")
-    
-    pdf_view_type = st.selectbox(
-        "PDF timetable type",
-        ["Class / Section Timetable", "Faculty Timetable", "Laboratory Timetable"],
-        key="formal_pdf_timetable_type"
+    st.header("📄 Download Timetable PDF")
+    st.caption(
+        "Generate formal timetable PDFs for sections, faculty, "
+        "and laboratories."
     )
-    
-    pdf_df = st.session_state.generated_timetable.copy()
-    
-    if pdf_view_type == "Class / Section Timetable":
-    pdf_filter_col = "Section_ID"
-    pdf_filter_label = "Select Class / Section"
-    elif pdf_view_type == "Faculty Timetable":
-        pdf_filter_col = "Faculty_ID"
-        pdf_filter_label = "Select Faculty"
-    else:
-        pdf_filter_col = "Resource"
-        pdf_filter_label = "Select Laboratory"
-        lab_mask = (
-            pdf_df.get("Session_Type", pd.Series(index=pdf_df.index, dtype=str))
-            .astype(str).str.contains("lab", case=False, na=False)
-            |
-            pdf_df.get("Resource_Type", pd.Series(index=pdf_df.index, dtype=str))
-            .astype(str).str.contains("lab", case=False, na=False)
-        )
-        pdf_df = pdf_df[lab_mask].copy()
 
-    pdf_entities = (
-    sorted(pdf_df[pdf_filter_col].dropna().astype(str).unique().tolist())
-    if pdf_filter_col in pdf_df.columns else []
-    )
-    
-    if not pdf_entities:
-        st.warning(f"No data available for {pdf_view_type.lower()} PDF export.")
-    else:
-        pdf_selected_entity = st.selectbox(
-            pdf_filter_label,
-            pdf_entities,
-            key="formal_pdf_timetable_entity"
+    # -----------------------------------------------------
+    # CHECK GENERATED TIMETABLE
+    # -----------------------------------------------------
+
+    if (
+        "generated_timetable" not in st.session_state
+        or st.session_state.generated_timetable is None
+        or st.session_state.generated_timetable.empty
+    ):
+
+        st.warning(
+            "Please generate the timetable using CP-SAT first."
         )
-        pdf_selected_df = pdf_df[pdf_df[pdf_filter_col].astype(str) == pdf_selected_entity].copy()
-    
-        # PDF time grid (matching the reference timetable format)
-        pdf_periods = list(range(1, 9))
-        pdf_period_times = {
-            1: "08:30 - 09:20",
-            2: "09:20 - 10:10",
-            3: "10:30 - 11:20",
-            4: "11:20 - 12:10",
-            5: "13:30 - 14:20",
-            6: "14:30 - 15:20",
-            7: "15:20 - 16:10",
-            8: "16:10 - 17:00",
-        }
-        pdf_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-        pdf_break_cols = [
-            ("MORNING BREAK", "10:10 - 10:30"),
-            ("LUNCH", "12:10 - 13:30"),
-            ("BREAK", "14:20 - 14:30"),
-        ]
-        # Grid columns: Day, P1, P2, morning break, P3, P4, lunch, P5, break, P6, P7, P8
-        pdf_grid_headers = [
-            "DAY", "P1\n08:30-09:20", "P2\n09:20-10:10", "MORNING BREAK\n10:10-10:30",
-            "P3\n10:30-11:20", "P4\n11:20-12:10", "LUNCH\n12:10-13:30",
-            "P5\n13:30-14:20", "BREAK\n14:20-14:30", "P6\n14:30-15:20",
-            "P7\n15:20-16:10", "P8\n16:10-17:00"
-        ]
-        pdf_grid = [pdf_grid_headers]
-        pdf_break_indexes = [3, 6, 8]
-    
-        def pdf_safe(value):
+
+    else:
+
+        timetable_df = st.session_state.generated_timetable.copy()
+
+        # -------------------------------------------------
+        # IMPORTS
+        # -------------------------------------------------
+
+        import io
+        import pandas as pd
+
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import landscape, A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.units import mm
+
+        from reportlab.platypus import (
+            SimpleDocTemplate,
+            Table,
+            TableStyle,
+            Paragraph,
+            Spacer
+        )
+
+        # -------------------------------------------------
+        # COLOR CONFIGURATION
+        # -------------------------------------------------
+
+        MAROON = colors.HexColor("#8F3B2E")
+        LIGHT_PEACH = colors.HexColor("#F3E5E0")
+        BREAK_PEACH = colors.HexColor("#E8D7D1")
+        WHITE = colors.white
+        BLACK = colors.black
+        DARK_MAROON = colors.HexColor("#7A3026")
+
+        # -------------------------------------------------
+        # SAFE TEXT FUNCTION
+        # -------------------------------------------------
+
+        def pdf_txt(value):
+
             if value is None:
                 return ""
+
             if isinstance(value, (list, tuple, set)):
                 return ", ".join(str(x) for x in value)
+
             try:
                 missing = pd.isna(value)
-                if not hasattr(missing, "__iter__") and bool(missing):
-                    return ""
-            except (TypeError, ValueError):
+
+                if not hasattr(missing, "__iter__"):
+
+                    if bool(missing):
+                        return ""
+
+            except Exception:
                 pass
+
             return str(value).strip()
 
-       for pdf_day in pdf_days:
-            day_rows = pdf_selected_df[pdf_selected_df["Day"].astype(str).str.lower() == pdf_day.lower()]
-            cells = [pdf_day.upper()]
-            for period in pdf_periods:
-                period_rows = day_rows[
-                    (pd.to_numeric(day_rows["Start_Period"], errors="coerce") <= period)
-                    & (pd.to_numeric(day_rows["End_Period"], errors="coerce") >= period)
-                ]
-                if period_rows.empty:
-                    cell_text = "-"
+        # -------------------------------------------------
+        # COLUMN DETECTION
+        # -------------------------------------------------
+
+        def find_column(df, possible_names):
+
+            for name in possible_names:
+
+                if name in df.columns:
+                    return name
+
+            return None
+
+        day_col = find_column(
+            timetable_df,
+            ["Day", "DAY", "day"]
+        )
+
+        subject_col = find_column(
+            timetable_df,
+            [
+                "Subject_Code",
+                "Subject Code",
+                "Course_Code",
+                "Course Code",
+                "Code",
+                "Subject",
+                "Course"
+            ]
+        )
+
+        subject_name_col = find_column(
+            timetable_df,
+            [
+                "Subject_Name",
+                "Subject Name",
+                "Course_Name",
+                "Course Name",
+                "Course_Title",
+                "Subject"
+            ]
+        )
+
+        section_col = find_column(
+            timetable_df,
+            [
+                "Section_ID",
+                "Section",
+                "SECTION",
+                "Class",
+                "Class_ID"
+            ]
+        )
+
+        faculty_col = find_column(
+            timetable_df,
+            [
+                "Faculty",
+                "Faculty_Name",
+                "Faculty Name",
+                "Faculty_ID",
+                "Faculty_Id",
+                "Instructor"
+            ]
+        )
+
+        faculty_id_col = find_column(
+            timetable_df,
+            [
+                "Faculty_ID",
+                "Faculty_Id",
+                "Faculty ID"
+            ]
+        )
+
+        resource_col = find_column(
+            timetable_df,
+            [
+                "Resource",
+                "Room",
+                "Room_ID",
+                "Laboratory",
+                "Lab"
+            ]
+        )
+
+        resource_type_col = find_column(
+            timetable_df,
+            [
+                "Resource_Type",
+                "Resource Type",
+                "Room_Type",
+                "Type"
+            ]
+        )
+
+        session_type_col = find_column(
+            timetable_df,
+            [
+                "Session_Type",
+                "Session Type",
+                "Type"
+            ]
+        )
+
+        start_period_col = find_column(
+            timetable_df,
+            [
+                "Start_Period",
+                "Start Period",
+                "Period",
+                "Period_No"
+            ]
+        )
+
+        periods_col = find_column(
+            timetable_df,
+            [
+                "Periods",
+                "Period_List",
+                "Period Numbers"
+            ]
+        )
+
+        start_time_col = find_column(
+            timetable_df,
+            [
+                "Start_Time",
+                "Start Time",
+                "Start"
+            ]
+        )
+
+        end_time_col = find_column(
+            timetable_df,
+            [
+                "End_Time",
+                "End Time",
+                "End"
+            ]
+        )
+
+        # -------------------------------------------------
+        # DAYS AND PERIODS
+        # -------------------------------------------------
+
+        DAYS = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday"
+        ]
+
+        PERIODS = {
+            1: ("08:30", "09:20"),
+            2: ("09:20", "10:10"),
+            3: ("10:30", "11:20"),
+            4: ("11:20", "12:10"),
+            5: ("13:30", "14:20"),
+            6: ("14:30", "15:20"),
+            7: ("15:20", "16:10"),
+            8: ("16:10", "17:00")
+        }
+
+        # Columns include breaks
+        TABLE_COLUMNS = [
+            "DAY",
+            "P1",
+            "P2",
+            "MORNING BREAK",
+            "P3",
+            "P4",
+            "LUNCH",
+            "P5",
+            "BREAK",
+            "P6",
+            "P7",
+            "P8"
+        ]
+
+        # -------------------------------------------------
+        # PERIOD EXTRACTION
+        # -------------------------------------------------
+
+        def get_period_numbers(row):
+
+            result = []
+
+            # First try Periods column
+            if periods_col is not None:
+
+                value = row.get(periods_col)
+
+                if isinstance(value, (list, tuple, set)):
+
+                    for item in value:
+
+                        try:
+                            result.append(int(item))
+                        except Exception:
+                            pass
+
                 else:
-                    pieces = []
-                    for _, pdf_row in period_rows.iterrows():
-                        course_code = pdf_safe(pdf_row.get("Course_Code"))
-                        course_title = pdf_safe(pdf_row.get("Course_Title"))
-                        session_type = pdf_safe(pdf_row.get("Session_Type"))
-                        resource = pdf_safe(pdf_row.get("Resource"))
-                        label = course_code or course_title or "Class"
-                        if "lab" in session_type.lower():
-                            label += " (LAB)"
-                        if pdf_view_type == "Faculty Timetable":
-                            label += f"\n{pdf_safe(pdf_row.get('Section_ID'))}"
-                        elif pdf_view_type == "Laboratory Timetable":
-                            label += f"\n{pdf_safe(pdf_row.get('Section_ID'))}"
-                        pieces.append(label)
-                    cell_text = "\n".join(pieces)
-                cells.append(cell_text)
-                if period in (2, 4, 5):
-                    if period == 2:
-                        cells.append("MORNING BREAK\n10:10-10:30")
-                    elif period == 4:
-                        cells.append("LUNCH\n12:10-13:30")
-                    elif period == 5:
-                        cells.append("BREAK\n14:20-14:30")
-            pdf_grid.append(cells)
-    # Allocation table, analogous to the reference image
-    allocation_headers = ["Subject Code", "Subject Name", "Faculty Handling", "Location"]
-    allocation_rows = [allocation_headers]
-    alloc_cols = [c for c in ["Course_Code", "Course_Title", "Faculty_ID", "Resource"] if c in pdf_selected_df.columns]
-    if alloc_cols:
-        unique_alloc = pdf_selected_df[alloc_cols].drop_duplicates().sort_values(alloc_cols[0])
-        for _, alloc_row in unique_alloc.iterrows():
-            allocation_rows.append([
-                pdf_safe(alloc_row.get("Course_Code")),
-                pdf_safe(alloc_row.get("Course_Title")),
-                pdf_safe(alloc_row.get("Faculty_ID")),
-                pdf_safe(alloc_row.get("Resource")),
+
+                    text_value = pdf_txt(value)
+
+                    if text_value:
+
+                        import re
+
+                        numbers = re.findall(
+                            r"\d+",
+                            text_value
+                        )
+
+                        result.extend(
+                            int(n)
+                            for n in numbers
+                        )
+
+            # Otherwise use Start_Period
+            if not result and start_period_col is not None:
+
+                try:
+
+                    start_period = int(
+                        float(row.get(start_period_col))
+                    )
+
+                    result.append(start_period)
+
+                except Exception:
+                    pass
+
+            # Remove duplicates
+            result = sorted(set(result))
+
+            return result
+
+        # -------------------------------------------------
+        # SUBJECT DISPLAY
+        # -------------------------------------------------
+
+        def get_subject_display(row):
+
+            code = (
+                pdf_txt(row.get(subject_col))
+                if subject_col is not None
+                else ""
+            )
+
+            name = (
+                pdf_txt(row.get(subject_name_col))
+                if subject_name_col is not None
+                else ""
+            )
+
+            if code and name and code != name:
+
+                return f"{code}<br/><font size='7'>{name}</font>"
+
+            if code:
+                return code
+
+            if name:
+                return name
+
+            return "SESSION"
+
+        # -------------------------------------------------
+        # SESSION DETAILS
+        # -------------------------------------------------
+
+        def get_session_details(row):
+
+            subject_code = (
+                pdf_txt(row.get(subject_col))
+                if subject_col is not None
+                else ""
+            )
+
+            subject_name = (
+                pdf_txt(row.get(subject_name_col))
+                if subject_name_col is not None
+                else ""
+            )
+
+            faculty = (
+                pdf_txt(row.get(faculty_col))
+                if faculty_col is not None
+                else ""
+            )
+
+            faculty_id = (
+                pdf_txt(row.get(faculty_id_col))
+                if faculty_id_col is not None
+                else ""
+            )
+
+            resource = (
+                pdf_txt(row.get(resource_col))
+                if resource_col is not None
+                else ""
+            )
+
+            if faculty_id and faculty and faculty_id != faculty:
+                faculty_display = f"{faculty} ({faculty_id})"
+            else:
+                faculty_display = faculty or faculty_id
+
+            return {
+                "code": subject_code,
+                "name": subject_name,
+                "faculty": faculty_display,
+                "resource": resource
+            }
+
+        # -------------------------------------------------
+        # GET DAY
+        # -------------------------------------------------
+
+        def normalize_day(value):
+
+            value = pdf_txt(value).capitalize()
+
+            for day in DAYS:
+
+                if value.startswith(day):
+                    return day
+
+            return value
+
+        # -------------------------------------------------
+        # GET ROWS FOR SELECTED ENTITY
+        # -------------------------------------------------
+
+        def get_entity_df(entity_type, selected_entity):
+
+            df = timetable_df.copy()
+
+            if entity_type == "Section":
+
+                if section_col is None:
+                    return pd.DataFrame()
+
+                return df[
+                    df[section_col]
+                    .astype(str)
+                    == str(selected_entity)
+                ].copy()
+
+            elif entity_type == "Faculty":
+
+                if faculty_col is not None:
+
+                    return df[
+                        df[faculty_col]
+                        .astype(str)
+                        == str(selected_entity)
+                    ].copy()
+
+                if faculty_id_col is not None:
+
+                    return df[
+                        df[faculty_id_col]
+                        .astype(str)
+                        == str(selected_entity)
+                    ].copy()
+
+            elif entity_type == "Laboratory":
+
+                if resource_col is None:
+                    return pd.DataFrame()
+
+                lab_mask = (
+                    df[resource_col]
+                    .astype(str)
+                    .str.contains(
+                        "Lab",
+                        case=False,
+                        na=False
+                    )
+                )
+
+                if resource_type_col is not None:
+
+                    lab_mask |= (
+                        df[resource_type_col]
+                        .astype(str)
+                        .str.contains(
+                            "Lab",
+                            case=False,
+                            na=False
+                        )
+                    )
+
+                if session_type_col is not None:
+
+                    lab_mask |= (
+                        df[session_type_col]
+                        .astype(str)
+                        .str.contains(
+                            "Lab",
+                            case=False,
+                            na=False
+                        )
+                    )
+
+                df = df[lab_mask].copy()
+
+                return df[
+                    df[resource_col]
+                    .astype(str)
+                    == str(selected_entity)
+                ].copy()
+
+            return pd.DataFrame()
+
+        # -------------------------------------------------
+        # FORMAL TIMETABLE PDF GENERATOR
+        # -------------------------------------------------
+
+        def generate_timetable_pdf(
+            entity_type,
+            selected_entity,
+            entity_df
+        ):
+
+            pdf_buffer = io.BytesIO()
+
+            doc = SimpleDocTemplate(
+                pdf_buffer,
+                pagesize=landscape(A4),
+                rightMargin=8 * mm,
+                leftMargin=8 * mm,
+                topMargin=8 * mm,
+                bottomMargin=8 * mm
+            )
+
+            styles = getSampleStyleSheet()
+
+            title_style = ParagraphStyle(
+                "TimetableTitle",
+                parent=styles["Title"],
+                fontName="Helvetica-Bold",
+                fontSize=17,
+                textColor=DARK_MAROON,
+                alignment=TA_CENTER,
+                spaceAfter=5
+            )
+
+            subtitle_style = ParagraphStyle(
+                "TimetableSubtitle",
+                parent=styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=10,
+                textColor=DARK_MAROON,
+                alignment=TA_CENTER,
+                spaceAfter=8
+            )
+
+            cell_style = ParagraphStyle(
+                "TimetableCell",
+                parent=styles["Normal"],
+                fontName="Helvetica",
+                fontSize=7,
+                leading=8,
+                alignment=TA_CENTER,
+                textColor=DARK_MAROON
+            )
+
+            header_style = ParagraphStyle(
+                "TimetableHeader",
+                parent=styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=7,
+                leading=8,
+                alignment=TA_CENTER,
+                textColor=WHITE
+            )
+
+            allocation_header_style = ParagraphStyle(
+                "AllocationHeader",
+                parent=styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=8,
+                leading=9,
+                alignment=TA_CENTER,
+                textColor=WHITE
+            )
+
+            allocation_cell_style = ParagraphStyle(
+                "AllocationCell",
+                parent=styles["Normal"],
+                fontName="Helvetica",
+                fontSize=7,
+                leading=8,
+                alignment=TA_CENTER,
+                textColor=BLACK
+            )
+
+            story = []
+
+            # -------------------------------------------------
+            # TITLE
+            # -------------------------------------------------
+
+            story.append(
+                Paragraph(
+                    "CLASS TIMETABLE",
+                    title_style
+                )
+            )
+
+            story.append(
+                Paragraph(
+                    f"{entity_type}: {selected_entity}",
+                    subtitle_style
+                )
+            )
+
+            story.append(Spacer(1, 4))
+
+            # -------------------------------------------------
+            # HEADER ROW
+            # -------------------------------------------------
+
+            header_row = [
+                Paragraph("DAY", header_style)
+            ]
+
+            header_row.extend([
+                Paragraph(
+                    f"<b>P{p}</b><br/>{PERIODS[p][0]} - {PERIODS[p][1]}",
+                    header_style
+                )
+                for p in [1, 2]
             ])
 
-    def build_formal_timetable_pdf():
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(
-            buffer, pagesize=landscape(A4),
-            leftMargin=22, rightMargin=22, topMargin=20, bottomMargin=20
-        )
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            "FormalTitle", parent=styles["Title"], fontName="Helvetica-Bold",
-            fontSize=16, leading=18, alignment=TA_CENTER, textColor=colors.HexColor("#8F3B2E")
-        )
-        subtitle_style = ParagraphStyle(
-            "FormalSubtitle", parent=styles["Normal"], fontSize=9,
-            leading=11, alignment=TA_CENTER, textColor=colors.HexColor("#8F3B2E")
-        )
-        cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=6.5, leading=7.5, alignment=TA_CENTER)
-        header_style = ParagraphStyle("Header", parent=styles["Normal"], fontSize=6.3, leading=7, alignment=TA_CENTER, textColor=colors.white)
-        allocation_style = ParagraphStyle("Allocation", parent=styles["Normal"], fontSize=7, leading=8, alignment=TA_LEFT)
-        story = [
-            Paragraph("CLASS TIMETABLE" if pdf_view_type == "Class / Section Timetable" else pdf_view_type.upper(), title_style),
-            Spacer(1, 5),
-            Paragraph(pdf_safe(pdf_selected_entity), subtitle_style),
-            Spacer(1, 12),
-        ]
-        formatted_grid = []
-        for ri, row in enumerate(pdf_grid):
-            formatted_row = []
-            for ci, cell in enumerate(row):
-                escaped = pdf_safe(cell).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
-                formatted_row.append(Paragraph(escaped, header_style if ri == 0 else cell_style))
-            formatted_grid.append(formatted_row)
-        col_widths = [65] + [62] * 8 + [54, 54, 54]
-        timetable_table = Table(formatted_grid, colWidths=col_widths, rowHeights=[30] + [57] * 5, repeatRows=1)
-        timetable_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#8F3B2E")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#8F3B2E")),
-            ("TEXTCOLOR", (0, 1), (0, -1), colors.white),
-            ("BACKGROUND", (3, 1), (3, -1), colors.HexColor("#E9D8D2")),
-            ("BACKGROUND", (6, 1), (6, -1), colors.HexColor("#E9D8D2")),
-            ("BACKGROUND", (8, 1), (8, -1), colors.HexColor("#E9D8D2")),
-            ("BACKGROUND", (1, 1), (2, -1), colors.HexColor("#F4E5E0")),
-            ("BACKGROUND", (4, 1), (5, -1), colors.white),
-            ("BACKGROUND", (7, 1), (7, -1), colors.white),
-            ("BACKGROUND", (9, 1), (11, -1), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#777777")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 2),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-        ]))
-        story.append(timetable_table)
-        story += [Spacer(1, 10), Paragraph("SUBJECT AND FACULTY ALLOCATION", subtitle_style), Spacer(1, 5)]
-        alloc_formatted = [[Paragraph(str(x), header_style) for x in allocation_rows[0]]]
-        for row in allocation_rows[1:]:
-            alloc_formatted.append([Paragraph(pdf_safe(x).replace("&", "&amp;"), allocation_style) for x in row])
-        allocation_table = Table(alloc_formatted, colWidths=[100, 360, 220, 130], repeatRows=1)
-        allocation_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#8F3B2E")),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#777777")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F2F2")]),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ]))
-        story.append(allocation_table)
-        doc.build(story)
-        buffer.seek(0)
-        return buffer.getvalue()
+            header_row.append(
+                Paragraph(
+                    "<b>MORNING BREAK</b><br/>10:10 - 10:30",
+                    header_style
+                )
+            )
 
-    pdf_bytes = build_formal_timetable_pdf()
-    safe_name = "_".join(str(pdf_selected_entity).split())
-    st.download_button(
-        "⬇️ Download Formal Timetable PDF",
-        data=pdf_bytes,
-        file_name=f"{pdf_view_type.replace(' ', '_').replace('/', '-')}_{safe_name}.pdf",
-        mime="application/pdf",
-        key="formal_timetable_pdf_download"
-    )
+            header_row.extend([
+                Paragraph(
+                    f"<b>P{p}</b><br/>{PERIODS[p][0]} - {PERIODS[p][1]}",
+                    header_style
+                )
+                for p in [3, 4]
+            ])
+
+            header_row.append(
+                Paragraph(
+                    "<b>LUNCH</b><br/>12:10 - 13:30",
+                    header_style
+                )
+            )
+
+            header_row.append(
+                Paragraph(
+                    f"<b>P5</b><br/>{PERIODS[5][0]} - {PERIODS[5][1]}",
+                    header_style
+                )
+            )
+
+            header_row.append(
+                Paragraph(
+                    "<b>BREAK</b><br/>14:20 - 14:30",
+                    header_style
+                )
+            )
+
+            header_row.extend([
+                Paragraph(
+                    f"<b>P{p}</b><br/>{PERIODS[p][0]} - {PERIODS[p][1]}",
+                    header_style
+                )
+                for p in [6, 7, 8]
+            ])
+
+            # -------------------------------------------------
+            # TIMETABLE MATRIX
+            # -------------------------------------------------
+
+            timetable_matrix = [header_row]
+
+            for day in DAYS:
+
+                row_data = [
+                    Paragraph(
+                        f"<b>{day.upper()}</b>",
+                        header_style
+                    )
+                ]
+
+                # P1
+                row_data.append("")
+
+                # P2
+                row_data.append("")
+
+                # Morning break
+                row_data.append(
+                    Paragraph(
+                        "<b>BREAK</b><br/>10:10 - 10:30",
+                        cell_style
+                    )
+                )
+
+                # P3
+                row_data.append("")
+
+                # P4
+                row_data.append("")
+
+                # Lunch
+                row_data.append(
+                    Paragraph(
+                        "<b>LUNCH</b><br/>12:10 - 13:30",
+                        cell_style
+                    )
+                )
+
+                # P5
+                row_data.append("")
+
+                # Break
+                row_data.append(
+                    Paragraph(
+                        "<b>BREAK</b><br/>14:20 - 14:30",
+                        cell_style
+                    )
+                )
+
+                # P6
+                row_data.append("")
+
+                # P7
+                row_data.append("")
+
+                # P8
+                row_data.append("")
+
+                timetable_matrix.append(row_data)
+
+            # -------------------------------------------------
+            # FILL SESSION CELLS
+            # -------------------------------------------------
+
+            day_row_index = {
+                day: index + 1
+                for index, day in enumerate(DAYS)
+            }
+
+            period_column_index = {
+                1: 1,
+                2: 2,
+                3: 4,
+                4: 5,
+                5: 7,
+                6: 9,
+                7: 10,
+                8: 11
+            }
+
+            for _, row in entity_df.iterrows():
+
+                if day_col is None:
+                    continue
+
+                day = normalize_day(
+                    row.get(day_col)
+                )
+
+                if day not in day_row_index:
+                    continue
+
+                day_index = day_row_index[day]
+
+                period_numbers = get_period_numbers(row)
+
+                subject_display = get_subject_display(row)
+
+                for period in period_numbers:
+
+                    if period not in period_column_index:
+                        continue
+
+                    column_index = period_column_index[period]
+
+                    # Lab sessions may occupy multiple consecutive periods
+                    existing = timetable_matrix[
+                        day_index
+                    ][column_index]
+
+                    if existing:
+
+                        existing_text = str(existing)
+
+                        timetable_matrix[
+                            day_index
+                        ][column_index] = Paragraph(
+                            existing_text + "<br/>" + subject_display,
+                            cell_style
+                        )
+
+                    else:
+
+                        timetable_matrix[
+                            day_index
+                        ][column_index] = Paragraph(
+                            subject_display,
+                            cell_style
+                        )
+
+            # -------------------------------------------------
+            # TABLE WIDTHS
+            # -------------------------------------------------
+
+            available_width = (
+                landscape(A4)[0]
+                - doc.leftMargin
+                - doc.rightMargin
+            )
+
+            column_widths = [
+                55,   # Day
+                65,   # P1
+                65,   # P2
+                42,   # Morning Break
+                65,   # P3
+                65,   # P4
+                48,   # Lunch
+                65,   # P5
+                42,   # Break
+                65,   # P6
+                65,   # P7
+                65    # P8
+            ]
+
+            width_sum = sum(column_widths)
+
+            column_widths = [
+                width * available_width / width_sum
+                for width in column_widths
+            ]
+
+            timetable_table = Table(
+                timetable_matrix,
+                colWidths=column_widths,
+                rowHeights=[
+                    30
+                ] + [
+                    45
+                    for _ in DAYS
+                ],
+                repeatRows=1
+            )
+
+            # -------------------------------------------------
+            # TIMETABLE STYLING
+            # -------------------------------------------------
+
+            timetable_style = [
+
+                # Header
+                ("BACKGROUND", (0, 0), (-1, 0), MAROON),
+                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+
+                # Day column
+                ("BACKGROUND", (0, 1), (0, -1), MAROON),
+                ("TEXTCOLOR", (0, 1), (0, -1), WHITE),
+                ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+
+                # Break columns
+                ("BACKGROUND", (3, 0), (3, -1), BREAK_PEACH),
+                ("BACKGROUND", (6, 0), (6, -1), BREAK_PEACH),
+                ("BACKGROUND", (8, 0), (8, -1), BREAK_PEACH),
+
+                # Main table
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+
+                # Padding
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+
+            # Peach shading for cells containing subjects
+            for row_index in range(1, len(timetable_matrix)):
+
+                for col_index in range(1, len(TABLE_COLUMNS)):
+
+                    if col_index in [3, 6, 8]:
+                        continue
+
+                    cell_value = timetable_matrix[
+                        row_index
+                    ][col_index]
+
+                    if cell_value:
+
+                        timetable_style.append(
+                            (
+                                "BACKGROUND",
+                                (col_index, row_index),
+                                (col_index, row_index),
+                                LIGHT_PEACH
+                            )
+                        )
+
+            timetable_table.setStyle(
+                TableStyle(timetable_style)
+            )
+
+            story.append(timetable_table)
+
+            story.append(Spacer(1, 8))
+
+            # -------------------------------------------------
+            # SUBJECT / FACULTY / LOCATION ALLOCATION
+            # -------------------------------------------------
+
+            story.append(
+                Paragraph(
+                    "SUBJECT AND FACULTY AT LOCATION",
+                    subtitle_style
+                )
+            )
+
+            allocation_data = [
+                [
+                    Paragraph("Subject Code", allocation_header_style),
+                    Paragraph("Subject Name", allocation_header_style),
+                    Paragraph("Faculty Handling", allocation_header_style),
+                    Paragraph("Location", allocation_header_style)
+                ]
+            ]
+
+            seen_allocations = set()
+
+            for _, row in entity_df.iterrows():
+
+                details = get_session_details(row)
+
+                allocation_key = (
+                    details["code"],
+                    details["name"],
+                    details["faculty"],
+                    details["resource"]
+                )
+
+                if allocation_key in seen_allocations:
+                    continue
+
+                seen_allocations.add(allocation_key)
+
+                allocation_data.append([
+                    Paragraph(
+                        details["code"] or "-",
+                        allocation_cell_style
+                    ),
+                    Paragraph(
+                        details["name"] or "-",
+                        allocation_cell_style
+                    ),
+                    Paragraph(
+                        details["faculty"] or "-",
+                        allocation_cell_style
+                    ),
+                    Paragraph(
+                        details["resource"] or "-",
+                        allocation_cell_style
+                    )
+                ])
+
+            allocation_table = Table(
+                allocation_data,
+                colWidths=[
+                    available_width * 0.18,
+                    available_width * 0.42,
+                    available_width * 0.22,
+                    available_width * 0.18
+                ],
+                repeatRows=1
+            )
+
+            allocation_table.setStyle(
+                TableStyle([
+
+                    ("BACKGROUND", (0, 0), (-1, 0), MAROON),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+
+                    ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
+
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+
+                    # Alternate row colors
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [
+                        WHITE,
+                        colors.HexColor("#F5F5F5")
+                    ])
+                ])
+            )
+
+            story.append(allocation_table)
+
+            # -------------------------------------------------
+            # BUILD PDF
+            # -------------------------------------------------
+
+            doc.build(story)
+
+            pdf_buffer.seek(0)
+
+            return pdf_buffer.getvalue()
+
+        # =================================================
+        # PDF DOWNLOAD SELECTION
+        # =================================================
+
+        st.divider()
+
+        st.subheader("📥 Select Timetable to Download")
+
+        pdf_type = st.selectbox(
+            "Timetable type",
+            [
+                "Section / Class-wise",
+                "Faculty-wise",
+                "Laboratory-wise"
+            ],
+            key="option11_pdf_type"
+        )
+
+        # -------------------------------------------------
+        # SECTION PDF
+        # -------------------------------------------------
+
+        if pdf_type == "Section / Class-wise":
+
+            if section_col is None:
+
+                st.error(
+                    "Section column was not found in the timetable."
+                )
+
+            else:
+
+                section_options = sorted(
+                    timetable_df[section_col]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
+
+                selected_section = st.selectbox(
+                    "Select Section",
+                    section_options,
+                    key="option11_selected_section"
+                )
+
+                selected_df = get_entity_df(
+                    "Section",
+                    selected_section
+                )
+
+                if st.button(
+                    "📄 Generate Section Timetable PDF",
+                    key="option11_generate_section_pdf"
+                ):
+
+                    pdf_bytes = generate_timetable_pdf(
+                        "Section",
+                        selected_section,
+                        selected_df
+                    )
+
+                    st.download_button(
+                        "⬇️ Download Section Timetable PDF",
+                        data=pdf_bytes,
+                        file_name=(
+                            f"{selected_section}_Timetable.pdf"
+                        ),
+                        mime="application/pdf",
+                        key="option11_download_section_pdf"
+                    )
+
+        # -------------------------------------------------
+        # FACULTY PDF
+        # -------------------------------------------------
+
+        elif pdf_type == "Faculty-wise":
+
+            faculty_source_col = (
+                faculty_col
+                if faculty_col is not None
+                else faculty_id_col
+            )
+
+            if faculty_source_col is None:
+
+                st.error(
+                    "Faculty column was not found."
+                )
+
+            else:
+
+                faculty_options = sorted(
+                    timetable_df[faculty_source_col]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
+
+                selected_faculty = st.selectbox(
+                    "Select Faculty",
+                    faculty_options,
+                    key="option11_selected_faculty"
+                )
+
+                selected_df = get_entity_df(
+                    "Faculty",
+                    selected_faculty
+                )
+
+                if st.button(
+                    "📄 Generate Faculty Timetable PDF",
+                    key="option11_generate_faculty_pdf"
+                ):
+
+                    pdf_bytes = generate_timetable_pdf(
+                        "Faculty",
+                        selected_faculty,
+                        selected_df
+                    )
+
+                    st.download_button(
+                        "⬇️ Download Faculty Timetable PDF",
+                        data=pdf_bytes,
+                        file_name=(
+                            f"{selected_faculty}_Timetable.pdf"
+                        ),
+                        mime="application/pdf",
+                        key="option11_download_faculty_pdf"
+                    )
+
+        # -------------------------------------------------
+        # LAB PDF
+        # -------------------------------------------------
+
+        elif pdf_type == "Laboratory-wise":
+
+            if resource_col is None:
+
+                st.error(
+                    "Resource column was not found."
+                )
+
+            else:
+
+                lab_mask = (
+                    timetable_df[resource_col]
+                    .astype(str)
+                    .str.contains(
+                        "Lab",
+                        case=False,
+                        na=False
+                    )
+                )
+
+                if resource_type_col is not None:
+
+                    lab_mask |= (
+                        timetable_df[resource_type_col]
+                        .astype(str)
+                        .str.contains(
+                            "Lab",
+                            case=False,
+                            na=False
+                        )
+                    )
+
+                if session_type_col is not None:
+
+                    lab_mask |= (
+                        timetable_df[session_type_col]
+                        .astype(str)
+                        .str.contains(
+                            "Lab",
+                            case=False,
+                            na=False
+                        )
+                    )
+
+                lab_df = timetable_df[lab_mask].copy()
+
+                lab_options = sorted(
+                    lab_df[resource_col]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
+
+                if not lab_options:
+
+                    st.warning(
+                        "No laboratories were found in the timetable."
+                    )
+
+                else:
+
+                    selected_lab = st.selectbox(
+                        "Select Laboratory",
+                        lab_options,
+                        key="option11_selected_lab"
+                    )
+
+                    selected_df = get_entity_df(
+                        "Laboratory",
+                        selected_lab
+                    )
+
+                    if st.button(
+                        "📄 Generate Laboratory Timetable PDF",
+                        key="option11_generate_lab_pdf"
+                    ):
+
+                        pdf_bytes = generate_timetable_pdf(
+                            "Laboratory",
+                            selected_lab,
+                            selected_df
+                        )
+
+                        st.download_button(
+                            "⬇️ Download Laboratory Timetable PDF",
+                            data=pdf_bytes,
+                            file_name=(
+                                f"{selected_lab}_Timetable.pdf"
+                            ),
+                            mime="application/pdf",
+                            key="option11_download_lab_pdf"
+                        )
 # =========================================================
 # FOOTER
 # =========================================================
