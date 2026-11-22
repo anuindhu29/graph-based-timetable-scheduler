@@ -11,3 +11,4 @@ python-docx
 PyPDF2
 python-docx
 reportlab
+pypdf
