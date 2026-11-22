@@ -7036,7 +7036,3 @@ st.divider()
 st.caption(
     "Graph-Based Timetable Conflict Detection and Resolution System"
 )
-
-st.caption(
-    "Graph-Based Timetable Conflict Detection and Resolution System"
-)
