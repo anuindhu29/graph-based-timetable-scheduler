@@ -10,3 +10,4 @@ odfpy
 python-docx
 PyPDF2
 python-docx
+reportlab
